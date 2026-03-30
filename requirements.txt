@@ -8,3 +8,7 @@ python-multipart==0.0.6
 anthropic==0.34.0
 httpx==0.24.0
 python-dotenv==1.0.0
+duckduckgo-search==6.1.0
+html2text==2024.2.26
+requests==2.31.0
+beautifulsoup4==4.12.2

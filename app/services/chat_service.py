@@ -1,61 +1,164 @@
 from sqlalchemy.orm import Session
 from app.model.models import User, Session as DBSession, Message, Plan
 from app.schemas.chat import (
-    ChatRequest, ChatResponse, Question, 
+    ChatRequest, ChatResponse, Question,
     DestinationCard, HotelCard, PackageCard, FollowUpQuestion
 )
 from typing import Dict, List
 import json
 import re
+import requests
+from bs4 import BeautifulSoup
+import html2text
+from duckduckgo_search import DDGS
 from anthropic import Anthropic
 from app.core.config import settings
 
 class ChatService:
     def __init__(self):
         self.client = Anthropic(api_key=settings.claude_api_key)
+        self.html_converter = html2text.HTML2Text()
+        self.html_converter.ignore_links = False
+        self.html_converter.ignore_images = False
+        self.html_converter.ignore_tables = False
+        self.html_converter.body_width = 0  # Don't wrap text
+
+        # General conversational flow for AI search
         self.flow = [
-            {"key": "purpose", "question": "Where would you like to travel?", "required": True},
-            {"key": "date", "question": "When are you thinking of heading out?", "required": True},
-            {"key": "guests", "question": "Who's coming along for the ride?", "required": False},
-            {"key": "budget", "question": "What's your budget for this adventure?", "required": False},
+            {"key": "query", "question": "What would you like me to search for?", "required": True},
         ]
 
-        self.destination_data = {
-            "maldives": {
-                "destinations": [
-                    {"name": "Male City", "image": "https://images.unsplash.com/photo-1512453333734-c86a0d7c7a6f", "price": "$1,200", "rating": 4.9, "duration": "3 days"},
-                    {"name": "Baa Atoll", "image": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e", "price": "$2,400", "rating": 4.8, "duration": "5 days"},
-                    {"name": "North Male Atoll", "image": "https://images.unsplash.com/photo-1551632786-de41ec16a41d", "price": "$1,800", "rating": 4.9, "duration": "4 days"},
-                    {"name": "South Male Atoll", "image": "https://images.unsplash.com/photo-1559827260-dc66d52bef19", "price": "$2,100", "rating": 4.7, "duration": "4 days"},
-                ],
-                "hotels": [
-                    {"name": "Ocean Breeze Resort", "rating": 4.9, "price": "$400/night", "amenities": ["Beach access", "Spa", "Water sports"]},
-                    {"name": "Coral Reef Villas", "rating": 4.8, "price": "$350/night", "amenities": ["Snorkeling", "Diving", "Restaurant"]},
-                    {"name": "Sunset Overwater Bungalows", "rating": 4.7, "price": "$500/night", "amenities": ["Private pool", "Butler service", "Infinity deck"]},
-                ],
-                "packages": [
-                    {"name": "7-Day Island Escape", "price": "$2,800", "rating": 4.9, "highlights": ["Snorkeling", "Island hopping", "Sunset cruise"]},
-                    {"name": "5-Day Luxury Resort Tour", "price": "$3,300", "rating": 4.8, "highlights": ["Spa treatment", "Fine dining", "Water activities"]},
-                    {"name": "Adventure + Snorkel Package", "price": "$2,200", "rating": 4.7, "highlights": ["Diving lessons", "Local culture", "Beach relaxation"]},
-                ]
-            },
-            "dubai": {
-                "destinations": [
-                    {"name": "Dubai Marina", "image": "https://images.unsplash.com/photo-1518684029980-422177f9f7f0", "price": "$1,500", "rating": 4.8, "duration": "3 days"},
-                    {"name": "Downtown Dubai", "image": "https://images.unsplash.com/photo-1512455520664-37a23a0fb0b8", "price": "$1,300", "rating": 4.7, "duration": "3 days"},
-                    {"name": "Palm Jumeirah", "image": "https://images.unsplash.com/photo-1509316785289-025f5b846b35", "price": "$2,000", "rating": 4.9, "duration": "4 days"},
-                ],
-                "hotels": [
-                    {"name": "Burj Al Arab", "rating": 5.0, "price": "$1,500/night", "amenities": ["Private beach", "Michelin-star dining", "Concierge"]},
-                    {"name": "Emirates Towers", "rating": 4.8, "price": "$600/night", "amenities": ["Gym", "Pool", "Business center"]},
-                    {"name": "JW Marriott", "rating": 4.7, "price": "$400/night", "amenities": ["Spa", "Beach club", "Fine dining"]},
-                ],
-                "packages": [
-                    {"name": "5-Day Dubai Luxury", "price": "$2,500", "rating": 4.9, "highlights": ["Desert safari", "Burj Khalifa", "Shopping"]},
-                    {"name": "3-Day City Explorer", "price": "$1,500", "rating": 4.8, "highlights": ["City tours", "Beach time", "Mall visit"]},
-                    {"name": "Weekend Getaway", "price": "$1,200", "rating": 4.7, "highlights": ["Relaxation", "Local food", "Marina walk"]},
-                ]
+    def search_web(self, query: str, num_results: int = 5) -> List[Dict]:
+        """Search the web using DuckDuckGo and return results with content."""
+        try:
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=num_results))
+                return results
+        except Exception as e:
+            print(f"Search error: {e}")
+            return []
+
+    def fetch_and_convert_to_markdown(self, url: str) -> str:
+        """Fetch a webpage and convert it to markdown."""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             }
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+
+            # Convert HTML to markdown
+            markdown = self.html_converter.handle(response.text)
+
+            # Clean up the markdown
+            lines = markdown.split('\n')
+            cleaned_lines = []
+
+            for line in lines:
+                # Skip very long lines (likely navigation or ads)
+                if len(line) > 1000:
+                    continue
+                # Skip lines that are just links or images
+                if line.strip().startswith('![') or line.strip() == '':
+                    continue
+                cleaned_lines.append(line)
+
+            return '\n'.join(cleaned_lines[:50])  # Limit to first 50 lines
+
+        except Exception as e:
+            print(f"Error fetching {url}: {e}")
+            return ""
+
+    def perform_ai_search(self, query: str) -> Dict:
+        """Perform AI-powered search similar to Perplexity."""
+        # First, search the web
+        search_results = self.search_web(query, num_results=3)
+
+        if not search_results:
+            return {
+                "answer": "I couldn't find any search results for that query. Please try rephrasing your question.",
+                "sources": [],
+                "follow_up_questions": []
+            }
+
+        # Fetch content from top results
+        sources_content = []
+        sources = []
+
+        for i, result in enumerate(search_results[:3]):
+            url = result.get('href', '')
+            title = result.get('title', 'Unknown')
+            body = result.get('body', '')
+
+            if url:
+                # Try to fetch full content
+                full_content = self.fetch_and_convert_to_markdown(url)
+                if full_content:
+                    sources_content.append(f"Source {i+1} ({title}):\n{full_content}")
+                else:
+                    sources_content.append(f"Source {i+1} ({title}):\n{body}")
+
+                sources.append({
+                    "title": title,
+                    "url": url,
+                    "snippet": body[:200] + "..." if len(body) > 200 else body
+                })
+
+        # Combine all source content
+        combined_content = "\n\n".join(sources_content)
+
+        # Use Claude to generate a comprehensive answer
+        system_prompt = """You are a helpful AI search assistant like Perplexity. 
+        Based on the web search results provided, give a comprehensive, accurate answer to the user's query.
+        Be conversational, informative, and cite your sources when relevant.
+        If the information isn't available in the sources, say so clearly.
+        Keep your response natural and engaging."""
+
+        user_prompt = f"""
+Query: {query}
+
+Search Results:
+{combined_content}
+
+Please provide a comprehensive answer based on these search results. Be conversational and cite sources when you use information from them.
+"""
+
+        response = self.client.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=1000,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+
+        answer = response.content[0].text.strip()
+
+        # Generate follow-up questions
+        follow_up_prompt = f"""
+Based on this query: "{query}"
+And this answer: "{answer[:200]}..."
+
+Suggest 2-3 relevant follow-up questions the user might ask next.
+Return them as a JSON array of strings.
+"""
+
+        follow_up_response = self.client.messages.create(
+            model="claude-3-haiku-20240307",
+            max_tokens=200,
+            system="Generate relevant follow-up questions based on the conversation.",
+            messages=[{"role": "user", "content": follow_up_prompt}]
+        )
+
+        try:
+            follow_up_questions = json.loads(follow_up_response.content[0].text.strip())
+            if not isinstance(follow_up_questions, list):
+                follow_up_questions = []
+        except:
+            follow_up_questions = []
+
+        return {
+            "answer": answer,
+            "sources": sources,
+            "follow_up_questions": follow_up_questions
         }
 
     def process_message(self, db: Session, request: ChatRequest) -> ChatResponse:
@@ -87,16 +190,16 @@ class ChatService:
         hotels = []
         packages = []
         follow_ups = []
+        sources = []
 
-        if self.can_generate_plan(collected_info):
-            response = self.generate_full_tour_response(collected_info)
-            answer = response["conversational_text"]
-            destinations = response["destinations"]
-            hotels = response["hotels"]
-            packages = response["packages"]
-            follow_ups = response["follow_ups"]
-            plan_summary = json.dumps(collected_info)
+        # Check if we have a query to search for
+        if collected_info.get("query"):
+            search_result = self.perform_ai_search(collected_info["query"])
+            answer = search_result["answer"]
+            sources = search_result["sources"]
+            follow_ups = [FollowUpQuestion(question=q, suggestions=[]) for q in search_result["follow_up_questions"]]
             plan_generated = True
+            plan_summary = f"Search query: {collected_info['query']}"
         else:
             answer = self.generate_conversational_response(collected_info, next_questions)
 
@@ -116,6 +219,7 @@ class ChatService:
             hotels=hotels,
             packages=packages,
             follow_up_questions=follow_ups,
+            sources=sources,
             plan_generated=plan_generated,
             plan_summary=plan_summary
         )
@@ -123,6 +227,7 @@ class ChatService:
     def extract_info(self, history: set) -> Dict[str, str]:
         info: Dict[str, str] = {}
 
+        # Parse key:value lines first
         for msg in history:
             if ":" in msg:
                 parts = [p.strip() for p in msg.split(":", 1)]
@@ -132,29 +237,12 @@ class ChatService:
                         if item["key"] == key_text.lower():
                             info[item["key"]] = value_text
 
+        # For general search queries, treat any message as a potential query
         for msg in history:
-            lower = msg.lower()
-            
-            # Destination extraction
-            for dest in ["maldives", "dubai", "paris", "tokyo", "bali", "thailand"]:
-                if dest in lower and "purpose" not in info:
-                    info["purpose"] = dest.title()
-
-            dest_match = re.search(r"(?:travel to|trip to|visit)\s+([a-zA-Z ]+)", lower)
-            if dest_match and "purpose" not in info:
-                info["purpose"] = dest_match.group(1).strip().title()
-
-            date_match = re.search(r"(\d{4}-\d{2}-\d{2})", lower)
-            if date_match and "date" not in info:
-                info["date"] = date_match.group(1)
-
-            guests_match = re.search(r"(\d+)\s*guests?", lower)
-            if guests_match and "guests" not in info:
-                info["guests"] = guests_match.group(1)
-
-            budget_match = re.search(r"\$\s*(\d+)|budget(?: is)?\s*(\d+)", lower)
-            if budget_match and "budget" not in info:
-                info["budget"] = budget_match.group(1) or budget_match.group(2)
+            if msg and len(msg.strip()) > 3 and "query" not in info:
+                # Skip if it looks like a response or system message
+                if not msg.startswith(("Thanks", "Great", "I found", "Here's", "Based on")):
+                    info["query"] = msg.strip()
 
         return info
 
@@ -167,103 +255,11 @@ class ChatService:
 
     def generate_conversational_response(self, info: Dict[str, str], next_questions: List[Question]) -> str:
         if not info:
-            return "Hey there! 👋 Where are you thinking of heading? Tell me a destination and I'll help you plan the perfect trip!"
+            return "👋 Hi! I'm your AI search assistant. I can help you search the web and answer questions about any topic. What would you like to know?"
         elif next_questions:
             return next_questions[0].question
-        return "Tell me more about your travel plans!"
+        return "I'm ready to help! What would you like me to search for?"
 
     def can_generate_plan(self, info: Dict[str, str]) -> bool:
-        required = [item for item in self.flow if item["required"]]
-        return all(item["key"] in info for item in required)
-
-    def generate_full_tour_response(self, info: Dict[str, str]) -> dict:
-        destination = info.get("purpose", "your destination").lower()
-        date = info.get("date", "TBD")
-        guests = info.get("guests", "2")
-        budget = info.get("budget", "Flexible")
-
-        # Get destination-specific data
-        dest_data = self.destination_data.get(destination, self.get_generic_destination_data(destination))
-
-        # Convert to CardModel objects
-        destinations = [
-            DestinationCard(
-                name=d["name"],
-                image_url=d["image"],
-                rating=d["rating"],
-                reviews_count=int(d["rating"] * 100),
-                price_from=d["price"],
-                duration=d["duration"],
-                highlights=["Top rated", "Popular destination"]
-            )
-            for d in dest_data["destinations"]
-        ]
-
-        hotels = [
-            HotelCard(
-                name=h["name"],
-                image_url="https://images.unsplash.com/photo-1631049307264-da0ec9d70304",
-                rating=h["rating"],
-                reviews_count=int(h["rating"] * 150),
-                price_per_night=h["price"],
-                amenities=h["amenities"]
-            )
-            for h in sorted(dest_data["hotels"], key=lambda x: -x["rating"])
-        ]
-
-        packages = [
-            PackageCard(
-                name=p["name"],
-                price=p["price"],
-                duration=p["name"].split("-")[0] if "-" in p["name"] else "4 days",
-                rating=p["rating"],
-                highlights=p["highlights"]
-            )
-            for p in sorted(dest_data["packages"], key=lambda x: -x["rating"])
-        ]
-
-        follow_ups = [
-            FollowUpQuestion(
-                question="What activities interest you most?",
-                suggestions=["Water sports", "Cultural tours", "Relaxation", "Adventure"]
-            ),
-            FollowUpQuestion(
-                question="Any dietary or accessibility requirements?",
-                suggestions=["Vegetarian", "Wheelchair access", "Halal", "None"]
-            ),
-        ]
-
-        conversational_text = (
-            f"🌍 Perfect! I found some amazing options for {info.get('purpose', 'your destination')}!\n\n"
-            f"Based on your trip in {date} for {guests} guest(s) with a {budget} budget, "
-            f"here are handpicked destinations, hotels (sorted by ratings), and packages tailored for you.\n\n"
-            f"Check out the recommendations below and let me know what catches your eye!"
-        )
-
-        return {
-            "conversational_text": conversational_text,
-            "destinations": destinations,
-            "hotels": hotels,
-            "packages": packages,
-            "follow_ups": follow_ups,
-        }
-
-    def get_generic_destination_data(self, destination: str) -> dict:
-        return {
-            "destinations": [
-                {"name": f"{destination} City Center", "image": "https://images.unsplash.com/photo-1488646953014-85cb44e25828", "price": "$1,200", "rating": 4.6, "duration": "3 days"},
-                {"name": f"{destination} Landmarks", "image": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4", "price": "$1,500", "rating": 4.7, "duration": "4 days"},
-                {"name": f"{destination} Cultural Tour", "image": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800", "price": "$1,800", "rating": 4.8, "duration": "5 days"},
-            ],
-            "hotels": [
-                {"name": f"{destination} Grand Hotel", "rating": 4.8, "price": "$250/night", "amenities": ["Gym", "Restaurant", "WiFi"]},
-                {"name": f"{destination} Comfort Stay", "rating": 4.6, "price": "$180/night", "amenities": ["Breakfast", "Airport shuttle"]},
-                {"name": f"{destination} Boutique Inn", "rating": 4.7, "price": "$200/night", "amenities": ["Spa", "Rooftop bar"]},
-            ],
-            "packages": [
-                {"name": "5-Day City Explorer", "price": "$1,500", "rating": 4.7, "highlights": ["City tours", "Local dining", "Museum visits"]},
-                {"name": "4-Day Culture & Food", "price": "$1,200", "rating": 4.6, "highlights": ["Food tours", "Cultural sites"]},
-                {"name": "7-Day Comprehensive", "price": "$2,000", "rating": 4.8, "highlights": ["All attractions", "Expert guide", "Meals included"]},
-            ]
-        }
-
+        # For search engine, we can "generate" a response as soon as we have a query
+        return "query" in info and len(info["query"].strip()) > 0

@@ -38,6 +38,11 @@ class FollowUpQuestion(BaseModel):
     question: str
     suggestions: List[str] = []
 
+class Source(BaseModel):
+    title: str
+    url: str
+    snippet: str
+
 class ChatResponse(BaseModel):
     answer: str
     conversational_text: Optional[str] = None
@@ -45,5 +50,6 @@ class ChatResponse(BaseModel):
     hotels: List[HotelCard] = []
     packages: List[PackageCard] = []
     follow_up_questions: List[FollowUpQuestion] = []
+    sources: List[Source] = []
     plan_generated: bool = False
     plan_summary: Optional[str] = None
