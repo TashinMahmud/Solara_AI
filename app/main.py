@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import api_router
 
 app = FastAPI(
-    title="Gotrip — WanderAI Backend",
+    title="Gotrip — Solara Backend",
     description="AI travel orchestration layer powered by Claude.",
     version="2.0.0",
 )
@@ -21,4 +21,4 @@ app.include_router(api_router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "WanderAI"}
+    return {"status": "ok", "service": "Solara"}

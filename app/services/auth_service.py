@@ -8,5 +8,5 @@ def check_user_subscription(user_id: str | None):
     if user_id != "trial_user":
         raise HTTPException(
             status_code=403, 
-            detail="Active subscription required to use WanderAI. Please upgrade your plan."
+            detail="Active subscription required to use Solara. Please upgrade your plan."
         )

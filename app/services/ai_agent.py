@@ -7,7 +7,7 @@ from app.schemas import ChatMessage
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
 SYSTEM_PROMPT = """
-You are WanderAI, a friendly AI travel assistant. Your job is to collect 5 details from the user, search for flights and hotels, present those options, and finally submit the confirmed trip to the backend.
+You are Solara, a friendly AI travel assistant. Your job is to collect 5 details from the user, search for flights and hotels, present those options, and finally submit the confirmed trip to the backend.
 
 The six things you need:
 1. Location (e.g., Dubai, Tokyo)

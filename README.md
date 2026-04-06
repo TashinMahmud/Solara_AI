@@ -1,8 +1,8 @@
-# WanderAI (Gotrip) Backend
+# Solara (Gotrip) Backend
 
-WanderAI is a conversational, autonomous AI booking orchestrator powered by **FastAPI** and **Claude 3.5 Sonnet**. 
+Solara is a conversational, autonomous AI booking orchestrator powered by **FastAPI** and **Claude 3.5 Sonnet**. 
 
-Unlike a standard chatbot, WanderAI internally controls the flow of conversation to extract exact necessary booking parameters, explicitly triggers Python-native functions to scrape/search flight and hotel APIs, structures that data into a strict UI-ready JSON schema for the frontend, and finalizes outbound webhook requests to the core backend.
+Unlike a standard chatbot, Solara internally controls the flow of conversation to extract exact necessary booking parameters, explicitly triggers Python-native functions to scrape/search flight and hotel APIs, structures that data into a strict UI-ready JSON schema for the frontend, and finalizes outbound webhook requests to the core backend.
 
 ## Features
 - **Smart Conversational Flow:** Anthropic Claude 3.5 automatically manages the conversation state to collect Location, Dates, Travelers, Budget, and Experience.
