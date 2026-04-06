@@ -95,8 +95,8 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
+    session_id: str
     history: List[ChatMessage] = []
-    session_id: Optional[str] = None
     user_id: Optional[str] = None
 
 

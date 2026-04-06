@@ -11,6 +11,7 @@ CHAT_URL = f"{BASE_URL}/api/v1/chat"
 
 PAYLOAD = {
     "message": "I want to go to Dubai for a solo trip from March 10th to 18th on a moderate budget for a mix of everything. I am traveling on a US Passport.",
+    "session_id": "test_session_123",
     "history": [],
 }
 
