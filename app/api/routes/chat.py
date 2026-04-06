@@ -22,8 +22,10 @@ async def chat(request: ChatRequest):
         
         # 4. Database History Saving
         # Instead of the frontend passing huge arrays back and forth, the backend secretly appends the exchanges.
+        import json
         raw_db_history.append({"role": "user", "content": request.message})
-        raw_db_history.append({"role": "assistant", "content": result["ai_message"]})
+        # MUST save the full JSON result to history so Claude sees its previous JSON outputs and maintains the format!
+        raw_db_history.append({"role": "assistant", "content": json.dumps(result)})
         await save_session_history(request.session_id, raw_db_history)
 
         # Build ChatResponse directly. `run_agent` returns the json dict natively.
