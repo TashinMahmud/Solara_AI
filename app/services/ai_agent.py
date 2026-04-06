@@ -79,8 +79,8 @@ When you output your message to the user, you MUST respond with a single valid J
 }
 
 NOTE ON NULLS:
-- If you don't have flight/hotel data yet, leave `trip_card` and `trip_guide` as null.
-- If you don't have all parameters, include what you have in `parameters_extracted`.
+- If you don't have flight/hotel data yet, leave `trip_card` and `trip_guide` as explicitly `null`.
+- **CRITICAL**: NEVER set `parameters_extracted` to `null` itself. You MUST always output it as an object containing all 7 keys. For any parameter you don't know yet, set its value to `null` (e.g. `"start_date": null`). Keep whatever you HAVE collected (e.g. `"location": "India"`).
 """.strip()
 
 
