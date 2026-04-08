@@ -12,9 +12,9 @@ def get_system_prompt(user_status: dict) -> str:
     
     tier_instructions = ""
     if tier == "Pro":
-        tier_instructions = "You must provide Full Concierge Automation. When the user selects a specific option from the generated gallery, you MUST explicitly tell the user 'I am preparing your secure booking link now...' and CALL the `submit_trip_to_backend` tool to finalize the booking."
+        tier_instructions = "You must provide Full Concierge Automation. When the user selects a specific option from the generated gallery, you MUST explicitly tell the user 'I am preparing your secure booking link now...' and CALL the `submit_trip_to_backend` tool to finalize the booking. Set `checkout_required` to `false` and `checkout_url` to `null`."
     else:
-        tier_instructions = f"The user is on the Basic tier. Remind them gently in your message: 'You have {tasks} tasks remaining this month.' You must NOT call 'submit_trip_to_backend'. Instead, when the user selects a specific option, provide a message directing them to the manual checkout page ('checkout/XYZ') and explicitly tell them they must proceed there to conclude the booking."
+        tier_instructions = f"The user is on the Basic tier. Remind them gently in your message: 'You have {tasks} tasks remaining this month.' You must NOT call 'submit_trip_to_backend'. Instead, when the user selects a specific option, provide a message directing them to the manual checkout page ('checkout/XYZ') and explicitly tell them they must proceed there to conclude the booking. You MUST set `checkout_required` to `true` and `checkout_url` to the explicit URL path (e.g. `/checkout/manual-booking`)."
 
     prompt = f"""
 You are Solara, a friendly AI travel assistant. Your job is to collect 5 details from the user, search for flights and hotels, present those options, and guide the user.
@@ -90,7 +90,9 @@ You are an API server. You MUST ONLY output a raw, valid JSON object. DO NOT out
     "culture_etiquette": ["etiquette1"],
     "safety_info": {{ "safety_level": "High", "tips": [], "restrictions": [] }},
     "visa_status": "Visa Free"
-  }}
+  }},
+  "checkout_required": false,
+  "checkout_url": null
 }}
 
 NOTE ON NULLS:

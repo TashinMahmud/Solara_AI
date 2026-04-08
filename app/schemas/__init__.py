@@ -108,7 +108,6 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     session_id: str
-    history: List[ChatMessage] = []
     user_id: Optional[str] = None
 
 
@@ -118,6 +117,8 @@ class ChatResponse(BaseModel):
     trip_card: Optional[TripCard] = None
     trip_guide: Optional[TripGuide] = None
     submitted: bool = False
+    checkout_required: bool = False
+    checkout_url: Optional[str] = None
 
 
 class DatesDict(BaseModel):
