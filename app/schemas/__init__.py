@@ -23,9 +23,11 @@ class ExperienceEnum(str, Enum):
     mix = "Mix of everything"
 
 class SafetyLevelEnum(str, Enum):
+    very_high = "Very High"
     high = "High"
     moderate = "Moderate"
     low = "Low"
+    very_low = "Very Low"
 
 
 class ExtractedParameters(BaseModel):
@@ -54,6 +56,10 @@ class FlightInfo(BaseModel):
     duration: str
     price_usd: Optional[float] = None
     carrier_code: Optional[str] = None
+    loyalty_points_earned: Optional[int] = None
+    baggage_policy: Optional[str] = None
+    pnr_status: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class HotelInfo(BaseModel):
@@ -64,6 +70,10 @@ class HotelInfo(BaseModel):
     amenities: Optional[List[str]] = None
     review_count: Optional[int] = None
     tripadvisor_rating: Optional[float] = None
+    cancellation_policy: Optional[str] = None
+    check_in_instructions: Optional[str] = None
+    amenities_icons: Optional[List[str]] = None
+    image_url: Optional[str] = None
 
 
 class WeatherInfo(BaseModel):
@@ -81,6 +91,8 @@ class SafetyInfo(BaseModel):
 class TripGuide(BaseModel):
     flight: Optional[FlightInfo] = None
     hotel: Optional[HotelInfo] = None
+    flight_options: Optional[List[FlightInfo]] = []
+    hotel_options: Optional[List[HotelInfo]] = []
     weather: Optional[WeatherInfo] = None
     travel_tips: Optional[List[str]] =[]
     culture_etiquette: Optional[List[str]] = []

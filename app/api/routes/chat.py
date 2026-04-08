@@ -10,7 +10,7 @@ router = APIRouter()
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     # 1. SaaS Gatekeeping (Will raise its own 403 HTTPException if invalid)
-    check_user_subscription(request.user_id)
+    user_status = check_user_subscription(request.user_id)
 
     try:
         # 2. Database History Loading
@@ -18,7 +18,7 @@ async def chat(request: ChatRequest):
         parsed_history = [ChatMessage(**msg) for msg in raw_db_history]
 
         # 3. Agent Execution
-        result = await run_agent(request.message, parsed_history, user_id=request.user_id)
+        result = await run_agent(request.message, parsed_history, user_id=request.user_id, user_status=user_status)
         
         # 4. Database History Saving
         # Instead of the frontend passing huge arrays back and forth, the backend secretly appends the exchanges.

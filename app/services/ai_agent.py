@@ -6,8 +6,21 @@ from app.schemas import ChatMessage
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-SYSTEM_PROMPT = """
-You are Solara, a friendly AI travel assistant. Your job is to collect 5 details from the user, search for flights and hotels, present those options, and finally submit the confirmed trip to the backend.
+def get_system_prompt(user_status: dict) -> str:
+    tier = user_status.get("tier", "Basic") if user_status else "Basic"
+    tasks = user_status.get("remaining_tasks", 5) if user_status else 5
+    
+    tier_instructions = ""
+    if tier == "Pro":
+        tier_instructions = "You must provide Full Concierge Automation. When the user selects a specific option from the generated gallery, you MUST explicitly tell the user 'I am preparing your secure booking link now...' and CALL the `submit_trip_to_backend` tool to finalize the booking."
+    else:
+        tier_instructions = f"The user is on the Basic tier. Remind them gently in your message: 'You have {tasks} tasks remaining this month.' You must NOT call 'submit_trip_to_backend'. Instead, when the user selects a specific option, provide a message directing them to the manual checkout page ('checkout/XYZ') and explicitly tell them they must proceed there to conclude the booking."
+
+    prompt = f"""
+You are Solara, a friendly AI travel assistant. Your job is to collect 5 details from the user, search for flights and hotels, present those options, and guide the user.
+
+USER SUBSCRIPTION TIER: {tier}
+{tier_instructions}
 
 The six things you need:
 1. Location (e.g., Dubai, Tokyo)
@@ -32,9 +45,9 @@ Do NOT proceed to the next state until the user provides the answer for the curr
 If you ask more than one question per message, the system will crash.
 2. Once you have ALL 6 parameters, call `search_flights` and `search_hotels` right away to get live options. Cross-reference their citizenship and destination to provide a "Visa Required" or "Visa Free" warning in the `trip_guide.visa_status`.
 3. If the options returned drastically exceed the user's budget, DO NOT fail. Trigger `search_flexible_alternatives` and proactively suggest the alternative. Format your response exactly like: "I couldn't find a flight for [budget] on those exact dates, but if you are flexible by [offset] days, I found an option for [new_price]. Should we look at those dates instead?"
-4. Present the flight and hotel options to the user. (Your internal JSON output should also populate the trip_card and trip_guide fields with this fetched data so our UI can render it).
-5. Ask the user if they'd like to proceed with booking these options.
-6. Once the user says YES to an option, you MUST explicitly tell the user "I am preparing your secure booking link now..." in your `ai_message` before immediately calling `submit_trip_to_backend` with the chosen details.
+4. Present the flight and hotel OPTIONS to the user. (Your internal JSON output should populate the `flight_options` and `hotel_options` arrays inside `trip_guide` with this fetched data so our UI can render the gallery).
+5. WAIT for the user to explicitly tell you which Option they want before finalizing.
+6. Once the user makes their selection, follow the {tier} rules defined above to either submit or manual checkout. Set the chosen items cleanly in the `trip_guide.flight` and `trip_guide.hotel` single objects.
 
 WORKFLOW (Cancellation):
 If a user says "I want to cancel my trip to Dubai" or anything regarding cancellation:
@@ -47,9 +60,9 @@ Step 3: Analyze the output. The tool tells you eligibility. Assume standard poli
 FINAL RESPONSE FORMAT (MANDATORY):
 You are an API server. You MUST ONLY output a raw, valid JSON object. DO NOT output any normal conversational text outside of the JSON block! If you output text without JSON formatting, the frontend will crash.
 
-{
+{{
   "ai_message": "The natural language message you are saying right now.",
-  "parameters_extracted": {
+  "parameters_extracted": {{
     "location": "Dubai",
     "start_date": "YYYY-MM-DD",
     "end_date": "YYYY-MM-DD",
@@ -57,31 +70,34 @@ You are an API server. You MUST ONLY output a raw, valid JSON object. DO NOT out
     "budget": "Moderate",
     "experience": "Mix of everything",
     "citizenship": "US Passport"
-  },
-  "trip_card": {
+  }},
+  "trip_card": {{
     "destination": "...",
     "description": "...",
     "rating": 4.8,
     "distance_km": 5000,
     "restaurants_available": 300,
     "total_price_per_person": 1500,
-    "parameters_extracted": { ... same as above ... }
-  },
-  "trip_guide": {
-    "flight": { "route": "...", "stops": "...", "duration": "...", "price_usd": 600 },
-    "hotel": { "name": "...", "nights": 7, "rating": 4.7, "price_per_night_usd": 150 },
-    "weather": { "date": "...", "condition": "...", "temperature_celsius": 25 },
+    "parameters_extracted": {{ ... same as above ... }}
+  }},
+  "trip_guide": {{
+    "flight": null,
+    "hotel": null,
+    "flight_options": [{{ "route": "...", "price_usd": 600, "image_url": "...", "loyalty_points_earned": 60, "baggage_policy": "...", "pnr_status": "..." }}],
+    "hotel_options": [{{ "name": "...", "price_per_night_usd": 150, "image_url": "...", "cancellation_policy": "...", "check_in_instructions": "...", "amenities_icons": [] }}],
+    "weather": {{ "date": "...", "condition": "...", "temperature_celsius": 25 }},
     "travel_tips": ["tip1", "tip2"],
     "culture_etiquette": ["etiquette1"],
-    "safety_info": { "safety_level": "High", "tips": [], "restrictions": [] }, // safety_level MUST be exactly "High", "Moderate", or "Low".
+    "safety_info": {{ "safety_level": "High", "tips": [], "restrictions": [] }},
     "visa_status": "Visa Free"
-  }
-}
+  }}
+}}
 
 NOTE ON NULLS:
 - If you don't have flight/hotel data yet, leave `trip_card` and `trip_guide` as explicitly `null`.
 - **CRITICAL**: NEVER set `parameters_extracted` to `null` itself. You MUST always output it as an object containing all 7 keys. For any parameter you don't know yet, set its value to `null` (e.g. `"start_date": null`). Keep whatever you HAVE collected (e.g. `"location": "India"`).
-""".strip()
+"""
+    return prompt.strip()
 
 
 async def _dispatch_tool(tool_name: str, tool_input: dict, user_id: str = None) -> str:
@@ -129,7 +145,7 @@ async def _dispatch_tool(tool_name: str, tool_input: dict, user_id: str = None) 
     return json.dumps(result)
 
 
-async def run_agent(message: str, history: list[ChatMessage], user_id: str = None) -> dict:
+async def run_agent(message: str, history: list[ChatMessage], user_id: str = None, user_status: dict = None) -> dict:
     messages = []
 
     for msg in history:
@@ -138,12 +154,14 @@ async def run_agent(message: str, history: list[ChatMessage], user_id: str = Non
     messages.append({"role": "user", "content": message})
 
     submitted = False
+    
+    current_system_prompt = get_system_prompt(user_status)
 
     while True:
         response = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=4096,
-            system=SYSTEM_PROMPT,
+            system=current_system_prompt,
             tools=TOOL_DEFINITIONS,
             messages=messages,
         )
