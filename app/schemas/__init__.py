@@ -118,7 +118,6 @@ class ChatResponse(BaseModel):
     trip_guide: Optional[TripGuide] = None
     submitted: bool = False
     checkout_required: bool = False
-    checkout_url: Optional[str] = None
 
 
 class DatesDict(BaseModel):
