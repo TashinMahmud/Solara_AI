@@ -113,6 +113,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     ai_message: str
+    current_step: Optional[str] = None
     parameters_extracted: Optional[ExtractedParameters] = None
     trip_card: Optional[TripCard] = None
     trip_guide: Optional[TripGuide] = None
