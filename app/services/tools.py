@@ -78,6 +78,30 @@ async def search_flexible_alternatives(location: str, start_date: str, end_date:
     }
 
 
+async def confirm_cancellation(trip_id: str, user_id: str = None) -> dict:
+    """
+    Finalizes the cancellation after user confirms.
+    In production: calls the backend team's cancellation API to mark
+    the booking as cancelled and issue refund credits.
+    """
+    if MOCK_MODE:
+        print(f"[mock] confirm_cancellation: trip_id={trip_id}, user_id={user_id}")
+        return {
+            "status": "cancelled",
+            "refund_credits_issued": 1000,
+            "refund_delivery": "2-3 business days",
+            "booking_status": "CANCELLED"
+        }
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        res = await client.post(
+            f"{settings.internal_api_submit}/cancel",
+            json={"trip_id": trip_id, "user_id": user_id}
+        )
+        res.raise_for_status()
+        return res.json()
+
+
 
 TOOL_DEFINITIONS = [
     {
@@ -180,6 +204,20 @@ TOOL_DEFINITIONS = [
                 "travelers": {"type": "string"}
             },
             "required": ["location", "start_date", "end_date", "budget", "travelers"]
+        }
+    },
+    {
+        "name": "confirm_cancellation",
+        "description": (
+            "Call this ONLY after check_cancellation_eligibility returned eligible=true AND the user explicitly "
+            "confirmed they want to proceed with the cancellation. This finalizes the cancellation and issues refund credits."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "trip_id": {"type": "string", "description": "The ID or description of the trip being cancelled."}
+            },
+            "required": ["trip_id"]
         }
     }
 ]

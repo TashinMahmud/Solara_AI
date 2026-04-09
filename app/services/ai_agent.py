@@ -1,7 +1,7 @@
 import json
 import anthropic
 from app.core.config import settings
-from app.services.tools import TOOL_DEFINITIONS, search_flights, search_hotels, submit_trip_to_backend, check_cancellation_eligibility, search_flexible_alternatives
+from app.services.tools import TOOL_DEFINITIONS, search_flights, search_hotels, submit_trip_to_backend, check_cancellation_eligibility, search_flexible_alternatives, confirm_cancellation
 from app.schemas import ChatMessage
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -56,8 +56,9 @@ If a user says "I want to cancel my trip to Dubai" or anything regarding cancell
 Step 1: Ask them to specify which trip if unclear (e.g. "My Dubai trip in March").
 Step 2: Trigger the `check_cancellation_eligibility(trip_id)` tool. 
 Step 3: Analyze the output. The tool tells you eligibility. Assume standard policy is 72 hours.
-- If eligible (> 72 hours): "I've checked your booking... Since we are more than 72 hours away, you are eligible for a 100% refund in credits. To finalize this and receive your credits within 2-3 days, please click the 'Confirm Cancellation' button that I've just highlighted in your My Trip dashboard."
-- If NOT eligible (< 72 hours): "I'm sorry, our policy requires cancellations to be made at least 72 hours before departure. Since we are within that window, I cannot process a refund at this time."
+- If eligible (> 72 hours): Tell the user they qualify for a 100% refund in credits. Ask them: "Would you like me to proceed with the cancellation?" Set `current_step` to `"cancellation_confirm"`. Do NOT call `confirm_cancellation` yet. WAIT for the user to explicitly say yes.
+- If NOT eligible (< 72 hours): "I'm sorry, our policy requires cancellations to be made at least 72 hours before departure. Since we are within that window, I cannot process a refund at this time." Set `current_step` to `"complete"`.
+Step 4: Once the user confirms YES to cancellation, THEN call `confirm_cancellation(trip_id)` to finalize it. After the tool returns success, tell the user their booking is cancelled and credits have been issued. Set `current_step` to `"complete"`.
 
 FINAL RESPONSE FORMAT (MANDATORY):
 You are an API server. You MUST ONLY output a raw, valid JSON object. DO NOT output any normal conversational text outside of the JSON block! If you output text without JSON formatting, the frontend will crash.
@@ -142,6 +143,11 @@ async def _dispatch_tool(tool_name: str, tool_input: dict, user_id: str = None) 
             end_date=tool_input.get("end_date", ""),
             budget=tool_input.get("budget", ""),
             travelers=tool_input.get("travelers", "")
+        )
+    elif tool_name == "confirm_cancellation":
+        result = await confirm_cancellation(
+            trip_id=tool_input.get("trip_id", ""),
+            user_id=user_id,
         )
     else:
         result = {"error": f"Unknown tool: {tool_name}"}
