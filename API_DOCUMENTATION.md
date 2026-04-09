@@ -127,7 +127,7 @@ This field tells the frontend exactly which interactive UI component to display 
 | `"complete"` | Success screen (Pro) or Checkout redirect button (Basic) |
 
 The user can either **click a UI card** or **type their answer** — both send the next message to the same `/api/v1/chat` endpoint.
-
+current_step value ("location", "dates", "travelers_budget", "experience", "citizenship", "selection", "complete")
 ---
 
 ### `parameters_extracted`

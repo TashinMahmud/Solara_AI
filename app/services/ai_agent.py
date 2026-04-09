@@ -212,14 +212,45 @@ def _parse_response(text: str) -> dict:
     cleaned = text.strip()
     
     # Safely extract JSON object if there is conversational text wrapped around it
+    start_idx = cleaned.find("{")
+    end_idx = cleaned.rfind("}")
+    
+    if start_idx == -1 or end_idx == -1 or end_idx <= start_idx:
+        return {"ai_message": cleaned, "parameters_extracted": None, "trip_card": None, "trip_guide": None}
+    
+    json_str = cleaned[start_idx:end_idx+1]
+    
+    # Strategy 1: Standard parse
     try:
-        start_idx = cleaned.find("{")
-        end_idx = cleaned.rfind("}")
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            json_str = cleaned[start_idx:end_idx+1]
-            data = json.loads(json_str)
-            return data
+        data = json.loads(json_str)
+        return _unwrap_if_needed(data)
     except Exception:
         pass
-
+    
+    # Strategy 2: Relaxed parse (handles control characters & broken surrogates)
+    try:
+        import re
+        # Remove broken lone surrogate pairs that crash json.loads
+        fixed = re.sub(r'\\ud[89a-f][0-9a-f]{2}(?!\\ud[c-f][0-9a-f]{2})', '', json_str, flags=re.IGNORECASE)
+        data = json.loads(fixed, strict=False)
+        return _unwrap_if_needed(data)
+    except Exception:
+        pass
+    
     return {"ai_message": cleaned, "parameters_extracted": None, "trip_card": None, "trip_guide": None}
+
+
+def _unwrap_if_needed(data: dict) -> dict:
+    """
+    If Claude double-wrapped its JSON (the ai_message field contains another valid JSON string 
+    with its own ai_message key), unwrap it to the inner layer.
+    """
+    ai_msg = data.get("ai_message", "")
+    if isinstance(ai_msg, str) and ai_msg.strip().startswith("{"):
+        try:
+            inner = json.loads(ai_msg)
+            if isinstance(inner, dict) and "ai_message" in inner:
+                return inner
+        except Exception:
+            pass
+    return data
