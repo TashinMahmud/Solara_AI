@@ -5,6 +5,9 @@ class Settings(BaseSettings):
     internal_api_flights: str
     internal_api_hotels: str
     internal_api_submit: str
+    internal_api_cancellation: str = ""
+    internal_api_loyalty: str = ""
+    internal_api_pricing: str = ""
     app_env: str = "development"
 
     class Config:

@@ -1,7 +1,7 @@
 import json
 import anthropic
 from app.core.config import settings
-from app.services.tools import TOOL_DEFINITIONS, search_flights, search_hotels, submit_trip_to_backend, check_cancellation_eligibility, search_flexible_alternatives, confirm_cancellation
+from app.services.tools import TOOL_DEFINITIONS, search_flights, search_hotels, submit_trip_to_backend, check_cancellation_eligibility, search_flexible_alternatives, confirm_cancellation, get_user_points, apply_points_to_quote
 from app.schemas import ChatMessage
 
 client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -12,12 +12,19 @@ def get_system_prompt(user_status: dict) -> str:
     
     tier_instructions = ""
     if tier == "Pro":
-        tier_instructions = "You must provide Full Concierge Automation. When the user selects a specific option from the generated gallery, you MUST explicitly tell the user 'I am preparing your secure booking link now...' and CALL the `submit_trip_to_backend` tool to finalize the booking. Set `checkout_required` to `false`."
+        tier_instructions = (
+            "You must provide Full Concierge Automation. When the user selects a specific option from the generated gallery, "
+            "you MUST first collect passenger details (names, passports, preferences) through natural chat before finalizing. "
+            "Once ALL data is collected AND the user confirms the final itinerary, CALL the `submit_trip_to_backend` tool "
+            "(including the passengers array and points_applied). After the tool call, tell the user: "
+            "'I am preparing your secure booking link now...' — this directs them to the backend-managed payment UI. "
+            "Set `checkout_required` to `false`."
+        )
     else:
         tier_instructions = f"The user is on the Basic tier. Remind them gently in your message: 'You have {tasks} tasks remaining this month.' You must NOT call 'submit_trip_to_backend'. Instead, when the user selects a specific option, provide a message directing them to manually check out. You MUST set `checkout_required` to `true`."
 
     prompt = f"""
-You are Solara, a friendly AI travel assistant. Your job is to collect 5 details from the user, search for flights and hotels, present those options, and guide the user.
+You are Solara, a high end AI travel assistant and Data Orchestrator. Your job is to collect details from the user, search for flights and hotels, present those options, collect passenger data, apply loyalty rewards, and trigger the backend. You do NOT process payments yourself.
 
 USER SUBSCRIPTION TIER: {tier}
 {tier_instructions}
@@ -41,7 +48,9 @@ STATE 3 (Missing Travelers OR Budget): Set `current_step` to `"travelers_budget"
 STATE 4 (Missing Experience): Set `current_step` to `"experience"`. Ask "What kind of experience are you looking for?" -> STOP.
 STATE 5 (Missing Citizenship): Set `current_step` to `"citizenship"`. Ask "Which passport are you traveling on?" -> STOP.
 STATE 6 (All params collected, presenting options): Set `current_step` to `"selection"`.
-STATE 7 (User selected, booking done or checkout flagged): Set `current_step` to `"complete"`.
+STATE 7 (User selected an option): For Pro users, proceed to passenger collection. For Basic users, set `current_step` to `"complete"` and flag `checkout_required`.
+STATE 8 (Passenger Collection — Pro only): Set `current_step` to `"passengers"`. Collect full names, passport numbers, and optional seat/meal preferences for all travelers through natural chat. -> STOP until all passengers provided.
+STATE 9 (Rewards & Final Confirmation — Pro only): Call `apply_points_to_quote` to show the user their discounted total. Ask the user for a final "YES" to proceed. Once confirmed, call `submit_trip_to_backend` (including the `passengers` array and `points_applied`). Set `current_step` to `"complete"`.
 
 Do NOT proceed to the next state until the user provides the answer for the current state.
 If you ask more than one question per message, the system will crash.
@@ -50,6 +59,26 @@ If you ask more than one question per message, the system will crash.
 4. Present the flight and hotel OPTIONS to the user. (Your internal JSON output should populate the `flight_options` and `hotel_options` arrays inside `trip_guide` with this fetched data so our UI can render the gallery).
 5. WAIT for the user to explicitly tell you which Option they want before finalizing.
 6. Once the user makes their selection, follow the {tier} rules defined above to either submit or manual checkout. Set the chosen items cleanly in the `trip_guide.flight` and `trip_guide.hotel` single objects.
+7. REWARDS CONSULTANT:
+   a) At the VERY START of each session, call `get_user_points(user_id)` to check the user's loyalty balance.
+   b) If the tool returns `expiring_soon: true`, mention it ONCE as a helpful tip in your first message (e.g. "By the way, I noticed you have 1,200 points expiring in 15 days — let's make sure to use them today!"). Do NOT repeat this tip.
+   c) When presenting the price quote after the user selects a flight+hotel, call `apply_points_to_quote(base_price, points_to_use)` to show them a live discounted estimate in the chat.
+   d) The `trip_guide` JSON MUST include the pricing breakdown: `base_price`, `points_discount`, and `final_estimated_total`.
+   e) The `trip_card` JSON MUST include `points_applied` (integer) so the backend knows what the user agreed to.
+8. PASSENGER COLLECTION (Pro Plan only):
+   After the user selects their flight+hotel option, and BEFORE calling `submit_trip_to_backend`, you MUST collect:
+   - Full name for each traveler
+   - Passport number for each traveler
+   - Any seat/meal preferences (optional)
+   Ask for these details through natural chat. Once collected, include them in the `passengers` array when calling `submit_trip_to_backend`.
+   Set `current_step` to `"passengers"` during this collection phase.
+9. REWARD EARNING RATES (Hardcoded):
+   - Basic plan: 1% back in credits, points expire in 180 days.
+   - Pro plan: 2% back in credits, points expire in 365 days.
+   Mention the earning rate in the booking confirmation message.
+10. TIERED BEHAVIOR:
+    - Pro: Full data collection manifest (passengers, rewards) -> `submit_trip_to_backend`.
+    - Basic: Search & Recommendation only -> provide a link to the manual booking form. No `submit_trip_to_backend` call.
 
 WORKFLOW (Cancellation):
 If a user says "I want to cancel my trip to Dubai" or anything regarding cancellation:
@@ -73,7 +102,9 @@ You are an API server. You MUST ONLY output a raw, valid JSON object. DO NOT out
     "travelers": "Solo",
     "budget": "Moderate",
     "experience": "Mix of everything",
-    "citizenship": "US Passport"
+    "citizenship": "US Passport",
+    "passengers": [{{ "name": "John Doe", "passport": "A1234567" }}],
+    "passenger_preferences": "Window seat"
   }},
   "trip_card": {{
     "destination": "...",
@@ -82,6 +113,7 @@ You are an API server. You MUST ONLY output a raw, valid JSON object. DO NOT out
     "distance_km": 5000,
     "restaurants_available": 300,
     "total_price_per_person": 1500,
+    "points_applied": 1200,
     "parameters_extracted": {{ ... same as above ... }}
   }},
   "trip_guide": {{
@@ -93,14 +125,17 @@ You are an API server. You MUST ONLY output a raw, valid JSON object. DO NOT out
     "travel_tips": ["tip1", "tip2"],
     "culture_etiquette": ["etiquette1"],
     "safety_info": {{ "safety_level": "High", "tips": [], "restrictions": [] }},
-    "visa_status": "Visa Free"
+    "visa_status": "Visa Free",
+    "base_price": 1644,
+    "points_discount": 120,
+    "final_estimated_total": 1524
   }},
   "checkout_required": false
 }}
 
 NOTE ON NULLS:
 - If you don't have flight/hotel data yet, leave `trip_card` and `trip_guide` as explicitly `null`.
-- **CRITICAL**: NEVER set `parameters_extracted` to `null` itself. You MUST always output it as an object containing all 7 keys. For any parameter you don't know yet, set its value to `null` (e.g. `"start_date": null`). Keep whatever you HAVE collected (e.g. `"location": "India"`).
+- **CRITICAL**: NEVER set `parameters_extracted` to `null` itself. You MUST always output it as an object containing all keys. For any parameter you don't know yet, set its value to `null` (e.g. `"start_date": null`). Keep whatever you HAVE collected (e.g. `"location": "India"`).
 """
     return prompt.strip()
 
@@ -148,6 +183,15 @@ async def _dispatch_tool(tool_name: str, tool_input: dict, user_id: str = None) 
         result = await confirm_cancellation(
             trip_id=tool_input.get("trip_id", ""),
             user_id=user_id,
+        )
+    elif tool_name == "get_user_points":
+        result = await get_user_points(
+            user_id=tool_input.get("user_id", user_id or ""),
+        )
+    elif tool_name == "apply_points_to_quote":
+        result = await apply_points_to_quote(
+            base_price=tool_input.get("base_price", 0.0),
+            points_to_use=tool_input.get("points_to_use", 0),
         )
     else:
         result = {"error": f"Unknown tool: {tool_name}"}
@@ -251,10 +295,20 @@ def _unwrap_if_needed(data: dict) -> dict:
     If Claude double-wrapped its JSON (the ai_message field contains another valid JSON string 
     with its own ai_message key), unwrap it to the inner layer.
     """
+    import re
     ai_msg = data.get("ai_message", "")
     if isinstance(ai_msg, str) and ai_msg.strip().startswith("{"):
+        # Strategy 1: Standard parse
         try:
             inner = json.loads(ai_msg)
+            if isinstance(inner, dict) and "ai_message" in inner:
+                return inner
+        except Exception:
+            pass
+        # Strategy 2: Relaxed parse (handles broken surrogates from emojis)
+        try:
+            fixed = re.sub(r'\\ud[89a-f][0-9a-f]{2}(?!\\ud[c-f][0-9a-f]{2})', '', ai_msg, flags=re.IGNORECASE)
+            inner = json.loads(fixed, strict=False)
             if isinstance(inner, dict) and "ai_message" in inner:
                 return inner
         except Exception:

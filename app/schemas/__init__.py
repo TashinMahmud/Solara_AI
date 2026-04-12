@@ -30,6 +30,11 @@ class SafetyLevelEnum(str, Enum):
     very_low = "Very Low"
 
 
+class PassengerDetail(BaseModel):
+    name: str
+    passport: str
+
+
 class ExtractedParameters(BaseModel):
     location: Optional[str] = None
     start_date: Optional[str] = None
@@ -38,6 +43,8 @@ class ExtractedParameters(BaseModel):
     budget: Optional[BudgetEnum] = None
     experience: Optional[ExperienceEnum] = None
     citizenship: Optional[str] = None
+    passengers: Optional[List[PassengerDetail]] = None
+    passenger_preferences: Optional[str] = None
 
 
 class TripCard(BaseModel):
@@ -47,6 +54,7 @@ class TripCard(BaseModel):
     distance_km: int
     restaurants_available: int
     total_price_per_person: int
+    points_applied: Optional[int] = 0
     parameters_extracted: ExtractedParameters
 
 
@@ -98,6 +106,9 @@ class TripGuide(BaseModel):
     culture_etiquette: Optional[List[str]] = []
     safety_info: Optional[SafetyInfo] = None
     visa_status: Optional[str] = None
+    base_price: Optional[float] = 0.0
+    points_discount: Optional[float] = 0.0
+    final_estimated_total: Optional[float] = 0.0
 
 
 class ChatMessage(BaseModel):
