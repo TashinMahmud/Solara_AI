@@ -167,24 +167,19 @@ async def confirm_cancellation(trip_id: str, subscription_plan: str = "free") ->
         return res.json()
 
 
-async def get_user_points(subscription_plan: str) -> dict:
+async def get_user_points(user_id: str) -> dict:
     """
     Returns the user's current loyalty points balance, expiry info, and tier rates.
     In production: calls the backend team's loyalty API.
     """
     if MOCK_MODE:
-        print(f"[mock] get_user_points: subscription_plan={subscription_plan}")
-        if subscription_plan == "pro":
-            return {"points": 1200, "expiring_soon": True, "expiry_days": 15, "earning_rate": "2%", "expiry_window": "365 days"}
-        elif subscription_plan == "basic":
-            return {"points": 450, "expiring_soon": False, "expiry_days": 180, "earning_rate": "1%", "expiry_window": "180 days"}
-        else:
-            return {"points": 0, "expiring_soon": False, "expiry_days": 365, "earning_rate": "1%", "expiry_window": "365 days"}
+        print(f"[mock] get_user_points: user_id={user_id}")
+        return {"points": 1200, "expiring_soon": True, "expiry_days": 15, "earning_rate": "2%", "expiry_window": "365 days"}
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         res = await client.get(
             f"{settings.internal_api_loyalty}/points",
-            params={"plan": subscription_plan}
+            params={"user_id": user_id}
         )
         res.raise_for_status()
         return res.json()
@@ -354,9 +349,9 @@ TOOL_DEFINITIONS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "subscription_plan": {"type": "string", "description": "The subscription plan tier (free, basic, pro)."}
+                "user_id": {"type": "string", "description": "The authenticated user's ID."}
             },
-            "required": ["subscription_plan"]
+            "required": ["user_id"]
         }
     },
     {

@@ -60,7 +60,7 @@ If you ask more than one question per message, the system will crash.
 5. WAIT for the user to explicitly tell you which Option they want before finalizing.
 6. Once the user makes their selection, follow the {tier} rules defined above to either submit or manual checkout. Set the chosen items cleanly in the `trip_guide.flight` and `trip_guide.hotel` single objects.
 7. REWARDS CONSULTANT:
-   a) At the VERY START of each session, call `get_user_points(subscription_plan)` to check the user's loyalty balance.
+   a) At the VERY START of each session, call `get_user_points(user_id)` to check the user's loyalty balance.
    b) If the tool returns `expiring_soon: true`, mention it ONCE as a helpful tip in your first message (e.g. "By the way, I noticed you have 1,200 points expiring in 15 days — let's make sure to use them today!"). Do NOT repeat this tip.
    c) When presenting the price quote after the user selects a flight+hotel, call `apply_points_to_quote(base_price, points_to_use)` to show them a live discounted estimate in the chat.
    d) The `trip_guide` JSON MUST include the pricing breakdown: `base_price`, `points_discount`, and `final_estimated_total`.
@@ -187,7 +187,7 @@ async def _dispatch_tool(tool_name: str, tool_input: dict, subscription_plan: st
         )
     elif tool_name == "get_user_points":
         result = await get_user_points(
-            subscription_plan=tool_input.get("subscription_plan", subscription_plan),
+            user_id=tool_input.get("user_id", user_id or ""),
         )
     elif tool_name == "apply_points_to_quote":
         result = await apply_points_to_quote(
