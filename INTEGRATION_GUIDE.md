@@ -1,16 +1,33 @@
-# Solara AI Microservice: Production Integration Guide
+# Solara AI Microservice — Production Integration Guide
 
-This document outlines the strict requirements for deploying the Solara AI microservice and connecting it to the primary backend infrastructure.
+**Last Updated:** April 2026
 
-## 1. Environment Configuration
+This document outlines end-to-end requirements for deploying the Solara AI microservice and connecting it to the primary backend.
 
-To disable the internal MOCK_MODE and route traffic to the primary backend, the following environment variables must be provisioned in the AI microservice's `.env` or deployment pipeline.
+---
+
+## 1. Architecture
+
+Solara is a **stateless AI orchestration layer**. It does not store user data, bookings, or payment info. It receives a chat message, processes it through Claude, executes backend tool calls, and returns a structured JSON response.
+
+```
+Frontend → Primary Backend (auth, JWT) → Solara AI → Claude API
+                  ↑                          │
+                  └──────── HTTP tool calls ──┘
+```
+
+The primary backend acts as the gateway. It validates user auth, resolves `subscription_plan` and `user_id`, then proxies to Solara.
+
+---
+
+## 2. Environment Configuration
+
+Set these in the AI microservice's `.env` or deployment pipeline. Setting `APP_ENV=production` disables all internal mock responses.
 
 ```env
 APP_ENV=production
 ANTHROPIC_API_KEY=<required>
 
-# Route Targets (Replace domains with production/staging URLs)
 INTERNAL_API_FLIGHTS=https://api.domain.com/v1/flights/search
 INTERNAL_API_HOTELS=https://api.domain.com/v1/hotels/search
 INTERNAL_API_SUBMIT=https://api.domain.com/v1/trips/new
@@ -19,70 +36,180 @@ INTERNAL_API_LOYALTY=https://api.domain.com/v1/loyalty
 INTERNAL_API_PRICING=https://api.domain.com/v1/pricing
 ```
 
-## 2. Running the AI Service
+---
 
-The AI microservice is built on FastAPI. It should be deployed as a standalone stateless service.
+## 3. Running the AI Service
 
-**Start Command:**
 ```bash
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-**Health Check endpoint:** `GET /`
+**Health Check:** `GET /health` → `{"status": "ok", "service": "Solara"}`
 
 ---
 
-## 3. Required API Contracts (Primary Backend)
+## 4. Solara Input/Output
 
-The primary backend must expose the following 6 endpoints. The AI microservice acts as an HTTP Client and will execute `POST` or `GET` requests to these targets during user conversation loops. 
+### Request (from primary backend → Solara)
 
-Ensure the primary backend accepts these exact Request structures and returns the exact Response structures defined below.
+```
+POST /api/v1/chat
+```
 
-### 3.1. Auth & Tier Gatekeeping
-**Route:** `GET {INTERNAL_API_LOYALTY}/subscription`
-**Trigger:** On every chat request to verify access rights.
+```json
+{
+  "message": "I want to go to Japan",
+  "session_id": "sess_abc123",
+  "subscription_plan": "pro",
+  "user_id": "usr_789"
+}
+```
 
-*Request Params:*
-`?user_id=<str>`
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `message` | string | Yes | User's chat message. |
+| `session_id` | string | Yes | Unique conversation ID. Solara manages history via this key. |
+| `subscription_plan` | string | No (default: `free`) | `free`, `basic`, or `pro`. Controls AI behavior and tool access. |
+| `user_id` | string | No | Used for loyalty point lookups and booking attribution. |
+
+### Response (Solara → primary backend)
+
+```json
+{
+  "session_id": "sess_abc123",
+  "user_id": "usr_789",
+  "ai_message": "Welcome! Where would you like to go?",
+  "current_step": "location",
+  "parameters_extracted": { "location": null, ... },
+  "trip_card": null,
+  "trip_guide": null,
+  "submitted": false,
+  "checkout_required": false
+}
+```
+
+---
+
+## 5. Required API Contracts (Primary Backend)
+
+The primary backend must expose the following 8 endpoints. Solara calls these during the AI tool loop.
+
+Do not alter response keys without coordinating a `tools.py` update — the AI parser relies on exact key names.
+
+---
+
+### 5.1. Flight Search
+**Route:** `POST {INTERNAL_API_FLIGHTS}`
+**Trigger:** All 5 travel parameters collected.
+
+*Request Body:*
+```json
+{
+  "origin": "JFK",
+  "destination": "Tokyo",
+  "dates": { "start": "2025-10-01", "end": "2025-10-10" },
+  "budget": "Luxury"
+}
+```
+
+*Expected Response (200 OK):*
+Array of flight objects. Each must include: `route`, `stops`, `duration`, `price_usd`, `carrier_code`, `loyalty_points_earned`, `baggage_policy`, `pnr_status`, `image_url`.
+
+---
+
+### 5.2. Hotel Search
+**Route:** `POST {INTERNAL_API_HOTELS}`
+**Trigger:** All 5 travel parameters collected (called alongside flight search).
+
+*Request Body:*
+```json
+{
+  "destination": "Tokyo",
+  "dates": { "start": "2025-10-01", "end": "2025-10-10" },
+  "budget": "Luxury",
+  "travelers": "Solo"
+}
+```
+
+*Expected Response (200 OK):*
+Array of hotel objects. Each must include: `name`, `nights`, `rating`, `price_per_night_usd`, `amenities`, `review_count`, `tripadvisor_rating`, `cancellation_policy`, `check_in_instructions`, `amenities_icons`, `image_url`.
+
+---
+
+### 5.3. Flexible Alternatives Search
+**Route:** `POST {INTERNAL_API_FLIGHTS}/flexible`
+**Trigger:** Search results exceed user's budget.
+
+*Request Body:*
+```json
+{
+  "location": "Japan",
+  "start_date": "2025-10-01",
+  "end_date": "2025-10-10",
+  "budget": "Budget",
+  "travelers": "Solo"
+}
+```
 
 *Expected Response (200 OK):*
 ```json
 {
-  "tier": "Pro", 
+  "alternative_found": true,
+  "suggested_location": "Japan",
+  "suggested_dates": { "start": "2025-10-12", "end": "2025-10-17" },
+  "original_price": 1200,
+  "new_price": 850
+}
+```
+
+---
+
+### 5.4. Subscription Verification
+**Route:** `GET {INTERNAL_API_LOYALTY}/subscription`
+**Trigger:** Every chat request (gatekeeping).
+
+*Request Params:*
+`?plan=pro`
+
+*Expected Response (200 OK):*
+```json
+{
+  "tier": "Pro",
   "remaining_tasks": "Unlimited"
 }
 ```
-*(Return 403 or 404 if the user has no active subscription).*
+
+Return 403/404 if invalid. Solara will block the user with a 403.
 
 ---
 
-### 3.2. Fetch User Loyalty Points
+### 5.5. Fetch User Loyalty Points
 **Route:** `GET {INTERNAL_API_LOYALTY}/points`
-**Trigger:** Session start.
+**Trigger:** Start of each session (AI calls this tool automatically).
 
 *Request Params:*
-`?user_id=<str>`
+`?user_id=usr_789`
 
 *Expected Response (200 OK):*
 ```json
 {
-  "points": 1200, 
-  "expiring_soon": true, 
-  "expiry_days": 15, 
-  "earning_rate": "2%", 
+  "points": 1200,
+  "expiring_soon": true,
+  "expiry_days": 15,
+  "earning_rate": "2%",
   "expiry_window": "365 days"
 }
 ```
 
 ---
 
-### 3.3. Verify Cancellation Eligibility
+### 5.6. Cancellation Eligibility Check
 **Route:** `POST {INTERNAL_API_CANCELLATION}/eligibility`
-**Trigger:** User asks to cancel an existing trip prior to confirmation.
+**Trigger:** User mentions cancelling a trip.
 
 *Request Body:*
 ```json
-{"trip_id": "<str>"}
+{ "trip_id": "WDR-2025-123" }
 ```
 
 *Expected Response (200 OK):*
@@ -96,15 +223,15 @@ Ensure the primary backend accepts these exact Request structures and returns th
 
 ---
 
-### 3.4. Confirm Cancellation
+### 5.7. Confirm Cancellation
 **Route:** `POST {INTERNAL_API_SUBMIT}/cancel`
-**Trigger:** User confirms they want to proceed with canceling a trip.
+**Trigger:** User explicitly confirms cancellation after eligibility check.
 
 *Request Body:*
 ```json
 {
-  "trip_id": "<str>",
-  "user_id": "<str>"
+  "trip_id": "WDR-2025-123",
+  "subscription_plan": "pro"
 }
 ```
 
@@ -120,9 +247,9 @@ Ensure the primary backend accepts these exact Request structures and returns th
 
 ---
 
-### 3.5. Execute Pricing & Point Application
+### 5.8. Apply Points to Quote
 **Route:** `POST {INTERNAL_API_PRICING}/apply-points`
-**Trigger:** Price finalization step prior to checkout.
+**Trigger:** User selects flight+hotel, AI calculates discounted price.
 
 *Request Body:*
 ```json
@@ -143,22 +270,23 @@ Ensure the primary backend accepts these exact Request structures and returns th
 
 ---
 
-### 3.6. Submit Iterinary & Passenger Manifest
+### 5.9. Submit Itinerary & Passenger Manifest
 **Route:** `POST {INTERNAL_API_SUBMIT}`
-**Trigger:** "Pro" tier users confirm final passenger entry and state "yes".
+**Trigger:** Pro tier user confirms final booking (says "YES").
 
 *Request Body:*
 ```json
 {
-  "user_id": "<str>",
-  "location": "<str>",
-  "start_date": "YYYY-MM-DD",
-  "end_date": "YYYY-MM-DD",
-  "travelers": "Solo|Couple|Family",
-  "budget": "Budget|Moderate|Luxury",
-  "experience": "<str>",
-  "flight_details": { "route": "US -> Japan", "price_usd": 1920 },
-  "hotel_details": { "name": "Boutique Nest Japan", "price_per_night_usd": 360 },
+  "subscription_plan": "pro",
+  "user_id": "usr_789",
+  "location": "Japan",
+  "start_date": "2025-10-01",
+  "end_date": "2025-10-10",
+  "travelers": "Solo",
+  "budget": "Luxury",
+  "experience": "Culture",
+  "flight_details": { "route": "JFK → Tokyo", "price_usd": 1920 },
+  "hotel_details": { "name": "Grand Hyatt Tokyo", "price_per_night_usd": 450 },
   "passengers": [
     { "name": "John Doe", "passport": "A1234567" }
   ],
@@ -177,7 +305,14 @@ Ensure the primary backend accepts these exact Request structures and returns th
 }
 ```
 
-## 4. Notes on Agentic Loop
+The AI reads this response and presents the booking reference and links to the user in the chat.
 
-The AI agent executes a recursive LLM tool-calling loop. When a tool `POST`s to the primary backend and receives the specified JSON response, it parses that JSON directly to craft its natural language response to the user.
-* Do not alter keys (`tier`, `points`, `base_price`, etc.) in the expected JSON responses without coordinating a `tools.py` update, as the AI's internal parser relies on specific dictionary schemas.
+---
+
+## 6. AI Agent Behavior Notes
+
+- The agent executes a bounded tool-calling loop (max 10 iterations per request).
+- Tool errors are caught gracefully and returned to Claude as error JSON, not thrown as HTTP exceptions.
+- Chat history is stored in local SQLite keyed by `session_id`. History is auto-truncated to the last 40 messages to prevent context overflow.
+- Free tier users are hard-blocked after their `remaining_tasks` limit is hit (counted by user turns in session history).
+- Structured logs are output under the `solara.*` namespace (`solara.agent`, `solara.chat`, `solara.session`).
