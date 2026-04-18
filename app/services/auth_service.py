@@ -5,34 +5,28 @@ import httpx
 
 MOCK_MODE = settings.app_env == "development"
 
-def check_user_subscription(user_id: str | None) -> Dict[str, Any]:
+def check_user_subscription(subscription_plan: str | None) -> Dict[str, Any]:
     """
     Middleware check for SaaS Gatekeeping. 
-    Verifies if a user has an active subscription and returns tier info.
+    Verifies the user's subscription tier.
     In production: calls the backend team's subscription/auth API.
     """
+    safe_plan = (subscription_plan or "free").lower()
+    
     if MOCK_MODE:
-        # Allowed trial/test users
-        subscriptions = {
-            "pro_tester": {"tier": "Pro", "remaining_tasks": "Unlimited"},
-            "basic_tester": {"tier": "Basic", "remaining_tasks": 5},
-            "trial_user": {"tier": "Pro", "remaining_tasks": "Unlimited"}
-        }
-
-        if user_id not in subscriptions:
-            raise HTTPException(
-                status_code=403, 
-                detail="Active subscription required to use Solara. Please upgrade your plan."
-            )
-        
-        return subscriptions[user_id]
+        if safe_plan == "pro":
+            return {"tier": "Pro", "remaining_tasks": "Unlimited"}
+        elif safe_plan == "basic":
+            return {"tier": "Basic", "remaining_tasks": 5}
+        else:
+            return {"tier": "Free", "remaining_tasks": 1}
 
     # Production: verify against backend subscription API
     try:
         with httpx.Client(timeout=10.0) as client:
             res = client.get(
                 f"{settings.internal_api_loyalty}/subscription",
-                params={"user_id": user_id}
+                params={"plan": safe_plan}
             )
             res.raise_for_status()
             data = res.json()

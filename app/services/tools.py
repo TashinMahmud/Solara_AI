@@ -63,12 +63,12 @@ async def submit_trip_to_backend(
     experience: str,
     flight_details: Optional[Dict[str, Any]] = None,
     hotel_details: Optional[Dict[str, Any]] = None,
-    user_id: Optional[str] = None,
+    subscription_plan: Optional[str] = "free",
     passengers: Optional[list] = None,
     points_applied: Optional[int] = 0,
 ) -> dict:
     payload = {
-        "user_id": user_id,
+        "subscription_plan": subscription_plan,
         "location": location,
         "start_date": start_date,
         "end_date": end_date,
@@ -141,14 +141,14 @@ async def search_flexible_alternatives(location: str, start_date: str, end_date:
         return res.json()
 
 
-async def confirm_cancellation(trip_id: str, user_id: str = None) -> dict:
+async def confirm_cancellation(trip_id: str, subscription_plan: str = "free") -> dict:
     """
     Finalizes the cancellation after user confirms.
     In production: calls the backend team's cancellation API to mark
     the booking as cancelled and issue refund credits.
     """
     if MOCK_MODE:
-        print(f"[mock] confirm_cancellation: trip_id={trip_id}, user_id={user_id}")
+        print(f"[mock] confirm_cancellation: trip_id={trip_id}, subscription_plan={subscription_plan}")
         return {
             "status": "cancelled",
             "refund_credits_issued": 1000,
@@ -159,30 +159,30 @@ async def confirm_cancellation(trip_id: str, user_id: str = None) -> dict:
     async with httpx.AsyncClient(timeout=15.0) as client:
         res = await client.post(
             f"{settings.internal_api_submit}/cancel",
-            json={"trip_id": trip_id, "user_id": user_id}
+            json={"trip_id": trip_id, "subscription_plan": subscription_plan}
         )
         res.raise_for_status()
         return res.json()
 
 
-async def get_user_points(user_id: str) -> dict:
+async def get_user_points(subscription_plan: str) -> dict:
     """
     Returns the user's current loyalty points balance, expiry info, and tier rates.
     In production: calls the backend team's loyalty API.
     """
     if MOCK_MODE:
-        print(f"[mock] get_user_points: user_id={user_id}")
-        mock_points = {
-            "pro_tester": {"points": 1200, "expiring_soon": True, "expiry_days": 15, "earning_rate": "2%", "expiry_window": "365 days"},
-            "basic_tester": {"points": 450, "expiring_soon": False, "expiry_days": 180, "earning_rate": "1%", "expiry_window": "180 days"},
-            "trial_user": {"points": 0, "expiring_soon": False, "expiry_days": 365, "earning_rate": "2%", "expiry_window": "365 days"}
-        }
-        return mock_points.get(user_id, {"points": 0, "expiring_soon": False, "expiry_days": 180, "earning_rate": "1%", "expiry_window": "180 days"})
+        print(f"[mock] get_user_points: subscription_plan={subscription_plan}")
+        if subscription_plan == "pro":
+            return {"points": 1200, "expiring_soon": True, "expiry_days": 15, "earning_rate": "2%", "expiry_window": "365 days"}
+        elif subscription_plan == "basic":
+            return {"points": 450, "expiring_soon": False, "expiry_days": 180, "earning_rate": "1%", "expiry_window": "180 days"}
+        else:
+            return {"points": 0, "expiring_soon": False, "expiry_days": 365, "earning_rate": "1%", "expiry_window": "365 days"}
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         res = await client.get(
             f"{settings.internal_api_loyalty}/points",
-            params={"user_id": user_id}
+            params={"plan": subscription_plan}
         )
         res.raise_for_status()
         return res.json()
@@ -352,9 +352,9 @@ TOOL_DEFINITIONS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "user_id": {"type": "string", "description": "The authenticated user's ID."}
+                "subscription_plan": {"type": "string", "description": "The subscription plan tier (free, basic, pro)."}
             },
-            "required": ["user_id"]
+            "required": ["subscription_plan"]
         }
     },
     {

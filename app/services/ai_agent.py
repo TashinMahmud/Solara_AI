@@ -60,7 +60,7 @@ If you ask more than one question per message, the system will crash.
 5. WAIT for the user to explicitly tell you which Option they want before finalizing.
 6. Once the user makes their selection, follow the {tier} rules defined above to either submit or manual checkout. Set the chosen items cleanly in the `trip_guide.flight` and `trip_guide.hotel` single objects.
 7. REWARDS CONSULTANT:
-   a) At the VERY START of each session, call `get_user_points(user_id)` to check the user's loyalty balance.
+   a) At the VERY START of each session, call `get_user_points(subscription_plan)` to check the user's loyalty balance.
    b) If the tool returns `expiring_soon: true`, mention it ONCE as a helpful tip in your first message (e.g. "By the way, I noticed you have 1,200 points expiring in 15 days — let's make sure to use them today!"). Do NOT repeat this tip.
    c) When presenting the price quote after the user selects a flight+hotel, call `apply_points_to_quote(base_price, points_to_use)` to show them a live discounted estimate in the chat.
    d) The `trip_guide` JSON MUST include the pricing breakdown: `base_price`, `points_discount`, and `final_estimated_total`.
@@ -140,7 +140,7 @@ NOTE ON NULLS:
     return prompt.strip()
 
 
-async def _dispatch_tool(tool_name: str, tool_input: dict, user_id: str = None) -> str:
+async def _dispatch_tool(tool_name: str, tool_input: dict, subscription_plan: str = "free") -> str:
     if tool_name == "search_flights":
         result = await search_flights(
             origin=tool_input.get("origin", "JFK"),  # Quick mock default
@@ -165,7 +165,7 @@ async def _dispatch_tool(tool_name: str, tool_input: dict, user_id: str = None) 
             experience=tool_input.get("experience", ""),
             flight_details=tool_input.get("flight_details"),
             hotel_details=tool_input.get("hotel_details"),
-            user_id=user_id,
+            subscription_plan=subscription_plan,
         )
     elif tool_name == "check_cancellation_eligibility":
         result = await check_cancellation_eligibility(
@@ -182,11 +182,11 @@ async def _dispatch_tool(tool_name: str, tool_input: dict, user_id: str = None) 
     elif tool_name == "confirm_cancellation":
         result = await confirm_cancellation(
             trip_id=tool_input.get("trip_id", ""),
-            user_id=user_id,
+            subscription_plan=subscription_plan,
         )
     elif tool_name == "get_user_points":
         result = await get_user_points(
-            user_id=tool_input.get("user_id", user_id or ""),
+            subscription_plan=tool_input.get("subscription_plan", subscription_plan),
         )
     elif tool_name == "apply_points_to_quote":
         result = await apply_points_to_quote(
@@ -199,7 +199,7 @@ async def _dispatch_tool(tool_name: str, tool_input: dict, user_id: str = None) 
     return json.dumps(result)
 
 
-async def run_agent(message: str, history: list[ChatMessage], user_id: str = None, user_status: dict = None) -> dict:
+async def run_agent(message: str, history: list[ChatMessage], subscription_plan: str = "free", user_status: dict = None) -> dict:
     messages = []
 
     for msg in history:
@@ -234,7 +234,7 @@ async def run_agent(message: str, history: list[ChatMessage], user_id: str = Non
                 if block.type == "tool_use":
                     if block.name == "submit_trip_to_backend":
                         submitted = True
-                    tool_output = await _dispatch_tool(block.name, block.input, user_id=user_id)
+                    tool_output = await _dispatch_tool(block.name, block.input, subscription_plan=subscription_plan)
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
