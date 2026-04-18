@@ -1,10 +1,19 @@
 import json
+import logging
 import anthropic
 from app.core.config import settings
 from app.services.tools import TOOL_DEFINITIONS, search_flights, search_hotels, submit_trip_to_backend, check_cancellation_eligibility, search_flexible_alternatives, confirm_cancellation, get_user_points, apply_points_to_quote
 from app.schemas import ChatMessage
 
-client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+logger = logging.getLogger("solara.agent")
+
+MAX_TOOL_ITERATIONS = 10
+MAX_HISTORY_MESSAGES = 40
+
+client = anthropic.Anthropic(
+    api_key=settings.anthropic_api_key,
+    timeout=60.0,
+)
 
 def get_system_prompt(user_status: dict) -> str:
     tier = user_status.get("tier", "Basic") if user_status else "Basic"
@@ -141,63 +150,70 @@ NOTE ON NULLS:
 
 
 async def _dispatch_tool(tool_name: str, tool_input: dict, subscription_plan: str = "free", user_id: str = None) -> str:
-    if tool_name == "search_flights":
-        result = await search_flights(
-            origin=tool_input.get("origin", "JFK"),  # Quick mock default
-            destination=tool_input.get("destination", ""),
-            dates=tool_input.get("dates", {}),
-            budget=tool_input.get("budget", "Moderate"),
-        )
-    elif tool_name == "search_hotels":
-        result = await search_hotels(
-            destination=tool_input.get("destination", ""),
-            dates=tool_input.get("dates", {}),
-            budget=tool_input.get("budget", "Moderate"),
-            travelers=tool_input.get("travelers", "Solo"),
-        )
-    elif tool_name == "submit_trip_to_backend":
-        result = await submit_trip_to_backend(
-            location=tool_input.get("location", ""),
-            start_date=tool_input.get("start_date", ""),
-            end_date=tool_input.get("end_date", ""),
-            travelers=tool_input.get("travelers", ""),
-            budget=tool_input.get("budget", ""),
-            experience=tool_input.get("experience", ""),
-            flight_details=tool_input.get("flight_details"),
-            hotel_details=tool_input.get("hotel_details"),
-            subscription_plan=subscription_plan,
-            user_id=user_id,
-        )
-    elif tool_name == "check_cancellation_eligibility":
-        result = await check_cancellation_eligibility(
-            trip_id=tool_input.get("trip_id", "")
-        )
-    elif tool_name == "search_flexible_alternatives":
-        result = await search_flexible_alternatives(
-            location=tool_input.get("location", ""),
-            start_date=tool_input.get("start_date", ""),
-            end_date=tool_input.get("end_date", ""),
-            budget=tool_input.get("budget", ""),
-            travelers=tool_input.get("travelers", "")
-        )
-    elif tool_name == "confirm_cancellation":
-        result = await confirm_cancellation(
-            trip_id=tool_input.get("trip_id", ""),
-            subscription_plan=subscription_plan,
-        )
-    elif tool_name == "get_user_points":
-        result = await get_user_points(
-            user_id=tool_input.get("user_id", user_id or ""),
-        )
-    elif tool_name == "apply_points_to_quote":
-        result = await apply_points_to_quote(
-            base_price=tool_input.get("base_price", 0.0),
-            points_to_use=tool_input.get("points_to_use", 0),
-        )
-    else:
-        result = {"error": f"Unknown tool: {tool_name}"}
+    logger.info(f"Tool call: {tool_name} | input keys: {list(tool_input.keys())}")
+    try:
+        if tool_name == "search_flights":
+            result = await search_flights(
+                origin=tool_input.get("origin", "JFK"),
+                destination=tool_input.get("destination", ""),
+                dates=tool_input.get("dates", {}),
+                budget=tool_input.get("budget", "Moderate"),
+            )
+        elif tool_name == "search_hotels":
+            result = await search_hotels(
+                destination=tool_input.get("destination", ""),
+                dates=tool_input.get("dates", {}),
+                budget=tool_input.get("budget", "Moderate"),
+                travelers=tool_input.get("travelers", "Solo"),
+            )
+        elif tool_name == "submit_trip_to_backend":
+            result = await submit_trip_to_backend(
+                location=tool_input.get("location", ""),
+                start_date=tool_input.get("start_date", ""),
+                end_date=tool_input.get("end_date", ""),
+                travelers=tool_input.get("travelers", ""),
+                budget=tool_input.get("budget", ""),
+                experience=tool_input.get("experience", ""),
+                flight_details=tool_input.get("flight_details"),
+                hotel_details=tool_input.get("hotel_details"),
+                subscription_plan=subscription_plan,
+                user_id=user_id,
+            )
+        elif tool_name == "check_cancellation_eligibility":
+            result = await check_cancellation_eligibility(
+                trip_id=tool_input.get("trip_id", "")
+            )
+        elif tool_name == "search_flexible_alternatives":
+            result = await search_flexible_alternatives(
+                location=tool_input.get("location", ""),
+                start_date=tool_input.get("start_date", ""),
+                end_date=tool_input.get("end_date", ""),
+                budget=tool_input.get("budget", ""),
+                travelers=tool_input.get("travelers", "")
+            )
+        elif tool_name == "confirm_cancellation":
+            result = await confirm_cancellation(
+                trip_id=tool_input.get("trip_id", ""),
+                subscription_plan=subscription_plan,
+            )
+        elif tool_name == "get_user_points":
+            result = await get_user_points(
+                user_id=tool_input.get("user_id", user_id or ""),
+            )
+        elif tool_name == "apply_points_to_quote":
+            result = await apply_points_to_quote(
+                base_price=tool_input.get("base_price", 0.0),
+                points_to_use=tool_input.get("points_to_use", 0),
+            )
+        else:
+            result = {"error": f"Unknown tool: {tool_name}"}
 
-    return json.dumps(result)
+        logger.info(f"Tool result: {tool_name} | success")
+        return json.dumps(result)
+
+    except Exception as e:
+        logger.error(f"Tool error: {tool_name} | {type(e).__name__}: {e}")
+        return json.dumps({"error": f"Tool '{tool_name}' failed: {str(e)}"})
 
 
 async def run_agent(
@@ -214,23 +230,38 @@ async def run_agent(
 
     messages.append({"role": "user", "content": message})
 
+    # Sliding window: keep only last N messages to prevent context overflow
+    if len(messages) > MAX_HISTORY_MESSAGES:
+        messages = messages[-MAX_HISTORY_MESSAGES:]
+        logger.warning(f"History truncated to last {MAX_HISTORY_MESSAGES} messages")
+
     submitted = False
     
     current_system_prompt = get_system_prompt(user_status)
 
-    while True:
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=4096,
-            system=current_system_prompt,
-            tools=TOOL_DEFINITIONS,
-            messages=messages,
-        )
+    for iteration in range(MAX_TOOL_ITERATIONS):
+        logger.info(f"Agent loop iteration {iteration + 1}/{MAX_TOOL_ITERATIONS}")
+
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=4096,
+                system=current_system_prompt,
+                tools=TOOL_DEFINITIONS,
+                messages=messages,
+            )
+        except anthropic.APITimeoutError:
+            logger.error("Anthropic API timeout")
+            return {"ai_message": "I'm sorry, the service is temporarily slow. Please try again.", "parameters_extracted": None, "trip_card": None, "trip_guide": None, "submitted": False}
+        except anthropic.APIError as e:
+            logger.error(f"Anthropic API error: {e}")
+            return {"ai_message": "I encountered a temporary issue. Please try sending your message again.", "parameters_extracted": None, "trip_card": None, "trip_guide": None, "submitted": False}
 
         if response.stop_reason == "end_turn":
             text = _extract_text(response)
             data = _parse_response(text)
             data["submitted"] = submitted
+            logger.info(f"Agent completed in {iteration + 1} iteration(s) | submitted={submitted}")
             return data
 
         if response.stop_reason == "tool_use":
@@ -242,6 +273,15 @@ async def run_agent(
                     if block.name == "submit_trip_to_backend":
                         submitted = True
                     tool_output = await _dispatch_tool(block.name, block.input, subscription_plan=subscription_plan, user_id=user_id)
+                    # Verify submission actually succeeded
+                    if block.name == "submit_trip_to_backend":
+                        try:
+                            tool_data = json.loads(tool_output)
+                            if "error" in tool_data:
+                                submitted = False
+                                logger.error(f"submit_trip_to_backend failed: {tool_data['error']}")
+                        except Exception:
+                            submitted = False
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
@@ -256,6 +296,16 @@ async def run_agent(
         data = _parse_response(text)
         data["submitted"] = submitted
         return data
+
+    # Safety: if we exhausted all iterations, return gracefully
+    logger.error(f"Agent hit max tool iterations ({MAX_TOOL_ITERATIONS})")
+    return {
+        "ai_message": "I've been processing your request but need to pause. Could you please repeat your last message?",
+        "parameters_extracted": None,
+        "trip_card": None,
+        "trip_guide": None,
+        "submitted": submitted
+    }
 
 
 def _extract_text(response) -> str:

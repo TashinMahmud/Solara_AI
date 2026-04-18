@@ -2,11 +2,19 @@ import json
 import time
 import aiosqlite
 import os
+import logging
+
+logger = logging.getLogger("solara.session")
 
 # SQLite database file path. 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "sessions.db")
 
+_db_initialized = False
+
 async def init_db():
+    global _db_initialized
+    if _db_initialized:
+        return
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute('''
             CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -16,6 +24,8 @@ async def init_db():
             )
         ''')
         await db.commit()
+    _db_initialized = True
+    logger.info("Session database initialized")
 
 async def get_session_history(session_id: str) -> list:
     """Retrieve chat history array for a specific session."""
