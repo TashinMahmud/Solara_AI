@@ -140,7 +140,7 @@ NOTE ON NULLS:
     return prompt.strip()
 
 
-async def _dispatch_tool(tool_name: str, tool_input: dict, subscription_plan: str = "free") -> str:
+async def _dispatch_tool(tool_name: str, tool_input: dict, subscription_plan: str = "free", user_id: str = None) -> str:
     if tool_name == "search_flights":
         result = await search_flights(
             origin=tool_input.get("origin", "JFK"),  # Quick mock default
@@ -166,6 +166,7 @@ async def _dispatch_tool(tool_name: str, tool_input: dict, subscription_plan: st
             flight_details=tool_input.get("flight_details"),
             hotel_details=tool_input.get("hotel_details"),
             subscription_plan=subscription_plan,
+            user_id=user_id,
         )
     elif tool_name == "check_cancellation_eligibility":
         result = await check_cancellation_eligibility(
@@ -199,7 +200,13 @@ async def _dispatch_tool(tool_name: str, tool_input: dict, subscription_plan: st
     return json.dumps(result)
 
 
-async def run_agent(message: str, history: list[ChatMessage], subscription_plan: str = "free", user_status: dict = None) -> dict:
+async def run_agent(
+    message: str, 
+    history: list[ChatMessage], 
+    subscription_plan: str = "free", 
+    user_status: dict = None,
+    user_id: str = None
+) -> dict:
     messages = []
 
     for msg in history:
@@ -234,7 +241,7 @@ async def run_agent(message: str, history: list[ChatMessage], subscription_plan:
                 if block.type == "tool_use":
                     if block.name == "submit_trip_to_backend":
                         submitted = True
-                    tool_output = await _dispatch_tool(block.name, block.input, subscription_plan=subscription_plan)
+                    tool_output = await _dispatch_tool(block.name, block.input, subscription_plan=subscription_plan, user_id=user_id)
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,

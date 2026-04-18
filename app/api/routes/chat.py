@@ -18,7 +18,13 @@ async def chat(request: ChatRequest):
         parsed_history = [ChatMessage(**msg) for msg in raw_db_history]
 
         # 3. Agent Execution
-        result = await run_agent(request.message, parsed_history, subscription_plan=request.subscription_plan, user_status=user_status)
+        result = await run_agent(
+            message=request.message,
+            history=parsed_history,
+            user_id=request.user_id,
+            subscription_plan=request.subscription_plan,
+            user_status=user_status
+        )
         
         # 4. Database History Saving
         # Instead of the frontend passing huge arrays back and forth, the backend secretly appends the exchanges.
@@ -28,8 +34,9 @@ async def chat(request: ChatRequest):
         raw_db_history.append({"role": "assistant", "content": json.dumps(result)})
         await save_session_history(request.session_id, raw_db_history)
 
-        # Inject session_id back into the response payload
+        # Inject session_id and user_id back into the response payload
         result["session_id"] = request.session_id
+        result["user_id"] = request.user_id
 
         # Build ChatResponse directly. `run_agent` returns the json dict natively.
         return ChatResponse(**result)

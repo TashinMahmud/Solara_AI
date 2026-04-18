@@ -119,11 +119,13 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     session_id: str
+    user_id: Optional[str] = None
     subscription_plan: str = "free"
 
 
 class ChatResponse(BaseModel):
     session_id: str
+    user_id: Optional[str] = None
     ai_message: str
     current_step: Optional[str] = None
     parameters_extracted: Optional[ExtractedParameters] = None

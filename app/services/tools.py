@@ -64,11 +64,13 @@ async def submit_trip_to_backend(
     flight_details: Optional[Dict[str, Any]] = None,
     hotel_details: Optional[Dict[str, Any]] = None,
     subscription_plan: Optional[str] = "free",
+    user_id: Optional[str] = None,
     passengers: Optional[list] = None,
     points_applied: Optional[int] = 0,
 ) -> dict:
     payload = {
         "subscription_plan": subscription_plan,
+        "user_id": user_id,
         "location": location,
         "start_date": start_date,
         "end_date": end_date,
