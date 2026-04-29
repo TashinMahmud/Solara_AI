@@ -31,19 +31,16 @@ def get_system_prompt(user_status: dict) -> str:
         )
     elif tier == "Basic":
         tier_instructions = (
-            f"TIER RULES (Basic):\n"
-            f"- The user has {tasks} tasks remaining this month. Mention this gently ONCE in your first response.\n"
+            "TIER RULES (Basic):\n"
             "- You may search flights and hotels and present options normally.\n"
-            "- You must NOT call `submit_trip_to_backend`. When the user selects an option, provide a polished summary and direct them to complete their booking manually.\n"
-            "- Set `checkout_required` to `true` when you present the final selection.\n"
+            "- You must NOT call `submit_trip_to_backend`. When the user selects an option, provide a polished summary, set `checkout_required` to `true`, and instruct them to click the checkout button to complete their booking manually.\n"
         )
     else:
         tier_instructions = (
             "TIER RULES (Free):\n"
-            "- The user is on the Free plan with very limited access.\n"
-            "- You may answer their first question and search for options, but you must NOT call `submit_trip_to_backend`.\n"
+            "- You may chat, answer questions, and search for options normally, but you must NOT call `submit_trip_to_backend`.\n"
             "- After presenting results, encourage them to upgrade: 'Upgrade to Basic or Pro to unlock full booking capabilities and earn loyalty rewards.'\n"
-            "- Set `checkout_required` to `true`.\n"
+            "- Set `checkout_required` to `true` when you present the final selection.\n"
         )
 
     prompt = f"""You are Solara, the premium AI travel concierge for Gotrip.
