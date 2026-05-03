@@ -243,7 +243,7 @@ async def run_agent(
 
         try:
             response = client.messages.create(
-                model="claude-3-5-sonnet-latest",
+                model="claude-3-haiku-20240307",
                 max_tokens=4096,
                 system=[
                     {
