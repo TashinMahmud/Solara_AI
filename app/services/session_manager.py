@@ -56,3 +56,11 @@ async def save_session_history(session_id: str, history: list):
             VALUES (?, ?, ?)
         ''', (session_id, history_json, now))
         await db.commit()
+
+async def delete_all_sessions():
+    """Wipe the entire session database. DANGER: Use for testing only."""
+    await init_db()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('DELETE FROM chat_sessions')
+        await db.commit()
+        logger.info("Database wiped: All sessions deleted.")

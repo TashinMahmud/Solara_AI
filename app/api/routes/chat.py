@@ -26,9 +26,16 @@ async def chat(request: ChatRequest):
             user_turns = sum(1 for msg in raw_db_history if msg.get("role") == "user")
             if user_turns >= remaining:
                 logger.warning(f"Free tier limit reached for session {request.session_id} ({user_turns}/{remaining})")
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"You've used all {remaining} free task(s) this month. Upgrade to Basic or Pro for more."
+                return ChatResponse(
+                    session_id=request.session_id,
+                    user_id=request.user_id,
+                    ai_message=f"You've used all {remaining} free task(s) this month. Upgrade to Basic or Pro for more.",
+                    current_step=None,
+                    parameters_extracted=None,
+                    trip_card=None,
+                    trip_guide=None,
+                    submitted=False,
+                    checkout_required=False
                 )
 
         # 4. Agent Execution
