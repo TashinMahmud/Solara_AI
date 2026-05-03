@@ -8,7 +8,7 @@ from app.schemas import ChatMessage
 logger = logging.getLogger("solara.agent")
 
 MAX_TOOL_ITERATIONS = 10
-MAX_HISTORY_MESSAGES = 40
+MAX_HISTORY_MESSAGES = 15
 
 client = anthropic.Anthropic(
     api_key=settings.anthropic_api_key,
@@ -243,9 +243,16 @@ async def run_agent(
 
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-6",
+                model="claude-3-5-sonnet-20240620",
                 max_tokens=4096,
-                system=current_system_prompt,
+                system=[
+                    {
+                        "type": "text",
+                        "text": current_system_prompt,
+                        "cache_control": {"type": "ephemeral"}
+                    }
+                ],
+                extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
                 tools=TOOL_DEFINITIONS,
                 messages=messages,
             )

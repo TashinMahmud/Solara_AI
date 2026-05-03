@@ -367,6 +367,7 @@ TOOL_DEFINITIONS = [
                 "points_to_use": {"type": "integer", "description": "The number of loyalty points the user wants to apply."}
             },
             "required": ["base_price", "points_to_use"]
-        }
+        },
+        "cache_control": {"type": "ephemeral"}
     }
 ]
