@@ -13,7 +13,7 @@ logging.basicConfig(
 app = FastAPI(
     title="Gotrip — Solara Backend",
     description="AI travel orchestration layer powered by Claude.",
-    version="2.0.2",
+    version="2.0.3",
 )
 
 app.add_middleware(

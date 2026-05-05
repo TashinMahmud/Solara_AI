@@ -256,6 +256,16 @@ async def run_agent(
                 tools=TOOL_DEFINITIONS,
                 messages=messages,
             )
+            
+            # Log Token Usage
+            if hasattr(response, 'usage') and response.usage:
+                u = response.usage
+                inp = getattr(u, 'input_tokens', 0)
+                out = getattr(u, 'output_tokens', 0)
+                c_read = getattr(u, 'cache_read_input_tokens', 0)
+                c_create = getattr(u, 'cache_creation_input_tokens', 0)
+                logger.info(f"API Usage | Input: {inp} | Output: {out} | Cache Read: {c_read} | Cache Create: {c_create}")
+
         except anthropic.APITimeoutError:
             logger.error("Anthropic API timeout")
             return {"ai_message": "I'm sorry, the service is temporarily slow. Please try again.", "parameters_extracted": None, "trip_card": None, "trip_guide": None, "submitted": False}
