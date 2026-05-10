@@ -145,6 +145,8 @@ CRITICAL NOTES:
 - Set `trip_card` and `trip_guide` to `null` until flight/hotel data is available.
 - When you do populate `trip_guide`, its `weather` field MUST be a strict object, e.g., {{"date": "YYYY-MM-DD", "condition": "Sunny", "temperature_celsius": 25}}. Do not use a string.
 - When you populate `trip_guide`, its `safety_info` field MUST be an object, e.g., {{"safety_level": "High", "tips": ["string"], "restrictions": ["string"]}}. Valid safety_levels: "Very High", "High", "Moderate", "Low", "Very Low".
+- Pricing data (`base_price`, `points_discount`, `final_estimated_total`) goes inside `trip_guide`, NOT `trip_card`.
+- When you populate `trip_card`, it MUST follow this exact schema: {{"destination": "string", "description": "string", "rating": 4.5, "distance_km": 10, "restaurants_available": 20, "total_price_per_person": 500, "points_applied": 0, "parameters_extracted": {{...copy of parameters_extracted...}}}}.
 - `submitted` should always be `false` in your output (the system sets it to `true` automatically after a successful `submit_trip_to_backend` call).
 """
     return prompt.strip()
