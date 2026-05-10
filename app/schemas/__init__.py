@@ -31,8 +31,8 @@ class SafetyLevelEnum(str, Enum):
 
 
 class PassengerDetail(BaseModel):
-    name: str
-    passport: str
+    name: Optional[str] = None
+    passport: Optional[str] = None
 
 
 class ExtractedParameters(BaseModel):
