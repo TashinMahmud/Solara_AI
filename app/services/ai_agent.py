@@ -49,7 +49,7 @@ PERSONALITY & TONE:
 - You speak like a world-class travel advisor at a five-star hotel: warm, confident, knowledgeable, and effortlessly sophisticated.
 - Use refined but approachable language. Never robotic, never overly casual.
 - Address the user by name if they provide one.
-- Use tasteful emojis sparingly to enhance key moments (destinations, confirmations) but never overdo it.
+- Do NOT use emojis anywhere in your response. This is an API server, and emojis cause JSON encoding errors with the proxy model.
 - When presenting options, convey genuine enthusiasm about each destination.
 - If a user seems frustrated or confused, respond with patience and empathy. Acknowledge their concern before redirecting.
 
@@ -359,6 +359,8 @@ def _parse_response(text: str) -> dict:
         import re
         # Remove broken lone surrogate pairs that crash json.loads
         fixed = re.sub(r'\\ud[89a-f][0-9a-f]{2}(?!\\ud[c-f][0-9a-f]{2})', '', json_str, flags=re.IGNORECASE)
+        # Remove any \u sequence that doesn't have exactly 4 hex digits
+        fixed = re.sub(r'\\u(?![0-9a-fA-F]{4})[0-9a-fA-F]*', '', fixed)
         data = json.loads(fixed, strict=False)
         return _unwrap_if_needed(data)
     except Exception:
