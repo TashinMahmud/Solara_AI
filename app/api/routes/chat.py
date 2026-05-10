@@ -35,7 +35,8 @@ async def chat(request: ChatRequest):
                     trip_card=None,
                     trip_guide=None,
                     submitted=False,
-                    checkout_required=False
+                    checkout_required=False,
+                    rate_limit_exceeded=True
                 )
 
         # 4. Agent Execution

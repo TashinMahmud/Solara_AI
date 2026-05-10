@@ -133,6 +133,7 @@ class ChatResponse(BaseModel):
     trip_guide: Optional[TripGuide] = None
     submitted: bool = False
     checkout_required: bool = False
+    rate_limit_exceeded: bool = False
 
 
 class DatesDict(BaseModel):
