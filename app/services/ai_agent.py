@@ -143,8 +143,8 @@ You are an API server. You MUST output ONLY a raw, valid JSON object. No text ou
 CRITICAL NOTES:
 - NEVER set `parameters_extracted` to `null` itself. Always output it as an object with all keys. Use `null` for unknown values.
 - Set `trip_card` and `trip_guide` to `null` until flight/hotel data is available.
-- When you do populate `trip_guide`, its `weather` field MUST be a strict object, e.g., {"date": "YYYY-MM-DD", "condition": "Sunny", "temperature_celsius": 25}. Do not use a string.
-- When you populate `trip_guide`, its `safety_info` field MUST be an object, e.g., {"safety_level": "High", "tips": ["string"], "restrictions": ["string"]}. Valid safety_levels: "Very High", "High", "Moderate", "Low", "Very Low".
+- When you do populate `trip_guide`, its `weather` field MUST be a strict object, e.g., {{"date": "YYYY-MM-DD", "condition": "Sunny", "temperature_celsius": 25}}. Do not use a string.
+- When you populate `trip_guide`, its `safety_info` field MUST be an object, e.g., {{"safety_level": "High", "tips": ["string"], "restrictions": ["string"]}}. Valid safety_levels: "Very High", "High", "Moderate", "Low", "Very Low".
 - `submitted` should always be `false` in your output (the system sets it to `true` automatically after a successful `submit_trip_to_backend` call).
 """
     return prompt.strip()
