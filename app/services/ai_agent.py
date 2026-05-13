@@ -12,7 +12,7 @@ MAX_HISTORY_MESSAGES = 15
 
 client = anthropic.Anthropic(
     api_key=settings.anthropic_api_key,
-    timeout=anthropic.Timeout(120.0, connect=10.0),
+    timeout=anthropic.Timeout(300.0, connect=10.0),
 )
 
 def get_system_prompt(user_status: dict) -> str:
