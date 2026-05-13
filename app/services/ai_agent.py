@@ -12,7 +12,7 @@ MAX_HISTORY_MESSAGES = 15
 
 client = anthropic.Anthropic(
     api_key=settings.anthropic_api_key,
-    timeout=60.0,
+    timeout=anthropic.Timeout(120.0, connect=10.0),
 )
 
 def get_system_prompt(user_status: dict) -> str:
@@ -118,7 +118,7 @@ DATA QUALITY:
 24. Flight and hotel data come from tool calls and are authoritative.
 
 OUTPUT FORMAT (MANDATORY):
-You are an API server. You MUST output ONLY a raw, valid JSON object. No text outside the JSON block.
+You are an API server. You MUST output ONLY a raw, valid JSON object. No text, notes, asterisks, markdown, or comments before or after the JSON block. NEVER add a note like '*(Note: I must respond in raw JSON...)*'. Just output the JSON and nothing else.
 
 {{
   "ai_message": "Your natural language message here.",
@@ -371,25 +371,37 @@ def _parse_response(text: str) -> dict:
 
 def _unwrap_if_needed(data: dict) -> dict:
     """
-    If Claude double-wrapped its JSON (the ai_message field contains another valid JSON string 
-    with its own ai_message key), unwrap it to the inner layer.
+    Handles two failure modes:
+    1. ai_message IS the inner JSON string (starts with {)
+    2. ai_message has preamble text before the inner JSON (find the first { inside it)
     """
     import re
     ai_msg = data.get("ai_message", "")
-    if isinstance(ai_msg, str) and ai_msg.strip().startswith("{"):
-        # Strategy 1: Standard parse
-        try:
-            inner = json.loads(ai_msg)
-            if isinstance(inner, dict) and "ai_message" in inner:
-                return inner
-        except Exception:
-            pass
-        # Strategy 2: Relaxed parse (handles broken surrogates from emojis)
-        try:
-            fixed = re.sub(r'\\ud[89a-f][0-9a-f]{2}(?!\\ud[c-f][0-9a-f]{2})', '', ai_msg, flags=re.IGNORECASE)
-            inner = json.loads(fixed, strict=False)
-            if isinstance(inner, dict) and "ai_message" in inner:
-                return inner
-        except Exception:
-            pass
+    if not isinstance(ai_msg, str):
+        return data
+    
+    # Find the first { in ai_message, regardless of preceding text/preamble
+    start_idx = ai_msg.find("{")
+    if start_idx == -1:
+        return data
+    
+    candidate = ai_msg[start_idx:]
+    
+    # Strategy 1: Standard parse
+    try:
+        inner = json.loads(candidate)
+        if isinstance(inner, dict) and "ai_message" in inner:
+            return inner
+    except Exception:
+        pass
+    
+    # Strategy 2: Relaxed parse (handles broken surrogates)
+    try:
+        fixed = re.sub(r'\\ud[89a-f][0-9a-f]{2}(?!\\ud[c-f][0-9a-f]{2})', '', candidate, flags=re.IGNORECASE)
+        inner = json.loads(fixed, strict=False)
+        if isinstance(inner, dict) and "ai_message" in inner:
+            return inner
+    except Exception:
+        pass
+    
     return data
