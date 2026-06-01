@@ -96,6 +96,17 @@ class SafetyInfo(BaseModel):
     restrictions: List[str]
 
 
+class TripAdvisorPOI(BaseModel):
+    location_id: str
+    name: str
+    rating: Optional[float] = None
+    num_reviews: Optional[int] = None
+    address: Optional[str] = None
+    category: Optional[str] = None
+    web_url: Optional[str] = None
+    photo_url: Optional[str] = None
+
+
 class TripGuide(BaseModel):
     flight: Optional[FlightInfo] = None
     hotel: Optional[HotelInfo] = None
@@ -109,6 +120,8 @@ class TripGuide(BaseModel):
     base_price: Optional[float] = 0.0
     points_discount: Optional[float] = 0.0
     final_estimated_total: Optional[float] = 0.0
+    local_attractions: Optional[List[TripAdvisorPOI]] = []
+    local_restaurants: Optional[List[TripAdvisorPOI]] = []
 
 
 class ChatMessage(BaseModel):

@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any
 
 from app.services.flight_service import fetch_flights
 from app.services.hotel_service import fetch_hotels
+from app.services.tripadvisor_service import fetch_tripadvisor_poi
 
 MOCK_MODE = settings.app_env == "development"
 
@@ -207,6 +208,12 @@ async def apply_points_to_quote(base_price: float, points_to_use: int) -> dict:
         )
         res.raise_for_status()
         return res.json()
+async def search_tripadvisor_poi(location: str, category: str) -> dict:
+    """
+    Search TripAdvisor for local attractions, landmarks, restaurants, cafes, etc.
+    """
+    results = await fetch_tripadvisor_poi(location, category)
+    return {"category": category, "location": location, "results": results}
 
 
 
@@ -369,5 +376,24 @@ TOOL_DEFINITIONS = [
             "required": ["base_price", "points_to_use"]
         },
         "cache_control": {"type": "ephemeral"}
+    },
+    {
+        "name": "search_tripadvisor_poi",
+        "description": (
+            "Search TripAdvisor for local attractions, landmarks, restaurants, cafes, or other points of interest (POI) "
+            "for a given destination to enrich the travel guide recommendations."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "location": {"type": "string", "description": "The destination city, e.g., 'Paris', 'Tokyo'."},
+                "category": {
+                    "type": "string",
+                    "enum": ["attractions", "restaurants"],
+                    "description": "Category of interest: 'attractions' for landmarks, activities; 'restaurants' for dining and cafes."
+                }
+            },
+            "required": ["location", "category"],
+        }
     }
 ]

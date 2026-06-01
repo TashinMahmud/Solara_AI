@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     internal_api_loyalty: str = ""
     internal_api_pricing: str = ""
     app_env: str = "development"
+    tripadvisor_api_key: str = ""
 
     class Config:
         env_file = ".env"

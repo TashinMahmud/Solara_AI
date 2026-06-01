@@ -2,7 +2,7 @@ import json
 import logging
 import anthropic
 from app.core.config import settings
-from app.services.tools import TOOL_DEFINITIONS, search_flights, search_hotels, submit_trip_to_backend, check_cancellation_eligibility, search_flexible_alternatives, confirm_cancellation, get_user_points, apply_points_to_quote
+from app.services.tools import TOOL_DEFINITIONS, search_flights, search_hotels, submit_trip_to_backend, check_cancellation_eligibility, search_flexible_alternatives, confirm_cancellation, get_user_points, apply_points_to_quote, search_tripadvisor_poi
 from app.schemas import ChatMessage
 
 logger = logging.getLogger("solara.agent")
@@ -147,6 +147,7 @@ CRITICAL NOTES:
 - When you populate `trip_guide`, its `safety_info` field MUST be an object, e.g., {{"safety_level": "High", "tips": ["string"], "restrictions": ["string"]}}. Valid safety_levels: "Very High", "High", "Moderate", "Low", "Very Low".
 - Pricing data (`base_price`, `points_discount`, `final_estimated_total`) goes inside `trip_guide`, NOT `trip_card`.
 - When you populate `trip_card`, it MUST follow this exact schema: {{"destination": "string", "description": "string", "rating": 4.5, "distance_km": 10, "restaurants_available": 20, "total_price_per_person": 500, "points_applied": 0, "parameters_extracted": {{...copy of parameters_extracted...}}}}.
+- If the user asks for local attractions, landmarks, restaurants, cafes, or activities, call the `search_tripadvisor_poi` tool and populate `trip_guide.local_attractions` and/or `trip_guide.local_restaurants` list. Each POI item in those lists MUST have the format: {{"location_id": "string", "name": "string", "rating": 4.5, "num_reviews": 100, "address": "string", "category": "string", "web_url": "string", "photo_url": "string"}}.
 - `submitted` should always be `false` in your output (the system sets it to `true` automatically after a successful `submit_trip_to_backend` call).
 """
     return prompt.strip()
@@ -207,6 +208,11 @@ async def _dispatch_tool(tool_name: str, tool_input: dict, subscription_plan: st
             result = await apply_points_to_quote(
                 base_price=tool_input.get("base_price", 0.0),
                 points_to_use=tool_input.get("points_to_use", 0),
+            )
+        elif tool_name == "search_tripadvisor_poi":
+            result = await search_tripadvisor_poi(
+                location=tool_input.get("location", ""),
+                category=tool_input.get("category", "attractions"),
             )
         else:
             result = {"error": f"Unknown tool: {tool_name}"}
