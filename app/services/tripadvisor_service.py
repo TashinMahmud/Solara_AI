@@ -117,7 +117,9 @@ async def fetch_tripadvisor_poi(location: str, category: str) -> List[Dict[str, 
         return _get_fallback_data(location, category)
 
     headers = {
-        "Accept": "application/json"
+        "Accept": "application/json",
+        "Referer": "https://solaraassistant.ai",
+        "Origin": "https://solaraassistant.ai"
     }
     
     query = f"{category} in {location}"
