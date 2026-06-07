@@ -6,12 +6,15 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Anthropic Claude](https://img.shields.io/badge/Claude-3.5_Sonnet-D97706?style=for-the-badge&logo=anthropic&logoColor=white)](https://www.anthropic.com/)
 [![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](#session-management)
+<br/>
+[![Live Demo](https://img.shields.io/badge/Demo-solaraassistant.ai-FF5733?style=for-the-badge&logo=google-chrome&logoColor=white)](https://solaraassistant.ai/)
 
 ---
 
 **Solara AI** is a high-performance, conversational AI travel orchestration layer. Powered by **Claude 3.5 Sonnet** and **FastAPI**, it manages multi-turn travel booking conversations, extracts key parameters, triggers live search APIs for flights and hotels, and formats data into structured, frontend-ready JSON.
 
 </div>
+
 
 ---
 
