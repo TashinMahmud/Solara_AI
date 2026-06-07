@@ -1,4 +1,4 @@
-# ✈️ Gotrip (Solara) — Conversational AI Booking Orchestrator
+# ✈️ Solara AI — Conversational AI Booking Orchestrator
 
 <div align="center">
 
@@ -9,7 +9,7 @@
 
 ---
 
-**Gotrip (Solara)** is a high-performance, conversational AI travel orchestration layer. Powered by **Claude 3.5 Sonnet** and **FastAPI**, it manages multi-turn travel booking conversations, extracts key parameters, triggers live search APIs for flights and hotels, and formats data into structured, frontend-ready JSON.
+**Solara AI** is a high-performance, conversational AI travel orchestration layer. Powered by **Claude 3.5 Sonnet** and **FastAPI**, it manages multi-turn travel booking conversations, extracts key parameters, triggers live search APIs for flights and hotels, and formats data into structured, frontend-ready JSON.
 
 </div>
 
@@ -17,7 +17,7 @@
 
 ## 🛠️ Technical Architecture
 
-Gotrip acts as a middleware orchestration layer between the user interface and downstream travel APIs (Amadeus, TripAdvisor).
+Solara AI acts as a middleware orchestration layer between the user interface and downstream travel APIs (Amadeus, TripAdvisor).
 
 ```
 +-------------------------------------------------------------+
@@ -127,7 +127,7 @@ uvicorn app.main:app --reload
 The server will start at `http://127.0.0.1:8000`.
 
 ### 4. Running Tests
-Gotrip includes a comprehensive test suite covering JSON structures and subscription authorization gates:
+Solara AI includes a comprehensive test suite covering JSON structures and subscription authorization gates:
 ```bash
 pytest
 # Or run direct scripts
